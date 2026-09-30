@@ -1,0 +1,6 @@
+# Python tools (asset generation, verification, analysis, documentation)
+cairosvg
+pillow
+numpy
+playwright   # PDF rendering (uses a Chromium binary; see gba/docs/tools/build_pdfs.py)
+pymupdf      # page checks of the generated PDFs

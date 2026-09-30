@@ -1,0 +1,85 @@
+{
+	"id": "87d5d943-7069-48bd-9bd6-6f4e0e4bc3c9",
+	"credits": "Device for reverse engineering provided by t.me/oksiniah.",
+	"core": "SPLB20",
+	"face_path": "./assets/ElfinTwins.svg",
+	"clock": 560000,
+	
+	"buttons": {
+		"btnEsc": {
+			"hot_keys": [49, 16777216]
+		},
+		"btnEnter": {
+			"hot_keys": [50, 16777221]
+		},
+		"btnClock": {
+			"hot_keys": [51, 67]
+		},
+		"btnLeft": {
+			"hot_keys": [65, 16777234]
+		},
+		"btnRight": {
+			"hot_keys": [68, 16777236]
+		},
+		"btnUp": {
+			"hot_keys": [87, 16777235]
+		},
+		"btnDown": {
+			"hot_keys": [83, 16777237]
+		}
+	},
+
+	"display": {
+		"motion_blur": 0.6,
+		"ghost_segments": 0,
+		"shadow": 3
+	},
+	
+	"peripherals": {
+		"direct_input": {
+			"btnEsc": {
+				"port": "PA",
+				"mask": 1,
+				"level": 0
+			},
+			"btnEnter": {
+				"port": "PA",
+				"mask": 16,
+				"level": 0
+			},
+			"btnClock": {
+				"port": "PA",
+				"mask": 8,
+				"level": 0
+			},
+			"btnLeft": {
+				"port": "PA",
+				"mask": 2,
+				"level": 0
+			},
+			"btnRight": {
+				"port": "PA",
+				"mask": 4,
+				"level": 0
+			},
+			"btnUp": {
+				"port": "PA",
+				"mask": 6,
+				"level": 0
+			},
+			"btnDown": {
+				"port": "PA",
+				"mask": 24,
+				"level": 0
+			}
+		}
+	},
+
+	"mask_options": {
+		"rom_path": "./assets/ElfinTwins.bin",
+		"non_crystal_mode": 0,
+		"port_pullup": {
+			"PA": 255
+		}
+	}
+}

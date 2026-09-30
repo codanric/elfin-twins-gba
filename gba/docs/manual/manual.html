@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Elfin Twins GM-021 - Instruction Manual</title>
+<link rel="stylesheet" href="../fonts/fonts.css">
+<style>
+  @page { size: A4; margin: 16mm 16mm 18mm 16mm; }
+  :root {
+    --purple: #4b3fa8; --purple-d: #2e2472; --teal: #16a38a; --lcd: #8ee68a;
+    --sky: #7bc6ee; --lemon: #e7e79a; --ink: #251d4f; --muted: #5d5a78; --paper: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body { margin: 0; font-family: 'Nunito', sans-serif; color: var(--ink); font-size: 10.6pt; line-height: 1.45; }
+  h1, h2, h3 { font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; color: var(--purple-d); line-height: 1.15; }
+  h1 { font-size: 30pt; margin: 0 0 4mm; }
+  h2 { font-size: 19pt; margin: 0 0 3mm; padding-bottom: 2mm; border-bottom: 3px solid var(--lcd); }
+  h3 { font-size: 13pt; margin: 5mm 0 1.5mm; color: var(--purple); }
+  p { margin: 0 0 2.4mm; }
+  .page { page-break-after: always; break-after: page; }
+  .page:last-child { page-break-after: auto; }
+  img { max-width: 100%; display: block; }
+  figure { margin: 3mm 0 4mm; }
+  figcaption { font-size: 9pt; color: var(--muted); margin-top: 1.5mm; text-align: center; }
+  .cover { height: 262mm; display: flex; flex-direction: column; align-items: center; justify-content: center;
+           text-align: center; background: linear-gradient(160deg, #5a4dc4 0%, #3b2f96 100%); color: white;
+           border-radius: 8mm; padding: 10mm; }
+  .cover h1 { color: white; font-size: 40pt; margin: 4mm 0 1mm; letter-spacing: 1px; }
+  .cover .model { font-family: 'Fredoka'; color: #7ff0c9; font-size: 18pt; }
+  .cover .sub { font-size: 13pt; opacity: .92; margin-top: 4mm; }
+  .cover img { width: 92mm; margin: 6mm 0 2mm; filter: drop-shadow(0 4mm 5mm rgba(0,0,0,.35)); }
+  .cover .small { font-size: 9pt; color: #e4e1ff; margin-top: 6mm; max-width: 150mm; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; align-items: start; }
+  .two-6040 { display: grid; grid-template-columns: 1.35fr 1fr; gap: 6mm; align-items: start; }
+  .tip { background: #eefbea; border-left: 5px solid var(--teal); padding: 2.5mm 3.5mm; border-radius: 2mm; margin: 3mm 0; }
+  .tip b:first-child { color: var(--teal); }
+  .warn { background: #fff4e5; border-left: 5px solid #e8912d; padding: 2.5mm 3.5mm; border-radius: 2mm; margin: 3mm 0; }
+  .note { background: #f1f0fb; border-left: 5px solid var(--purple); padding: 2.5mm 3.5mm; border-radius: 2mm; margin: 3mm 0; font-size: 9.6pt; }
+  table { border-collapse: collapse; width: 100%; margin: 2mm 0 4mm; font-size: 9.8pt; }
+  th { background: var(--purple); color: white; text-align: left; font-weight: 700; padding: 1.6mm 2.4mm; }
+  td { padding: 1.5mm 2.4mm; border-bottom: 1px solid #e3e1f1; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8f7fd; }
+  .key { display: inline-block; font-family: 'Fredoka'; font-weight: 600; font-size: 8.8pt; letter-spacing: .3px;
+         background: var(--purple); color: white; border-radius: 1.6mm; padding: .2mm 1.8mm; margin: 0 .3mm;
+         box-shadow: 0 .5mm 0 var(--purple-d); white-space: nowrap; }
+  .gba { background: #2d2d2d; box-shadow: 0 .5mm 0 #000; }
+  .steps { counter-reset: s; list-style: none; padding: 0; margin: 2mm 0 3mm; }
+  .steps li { counter-increment: s; position: relative; padding: 1mm 0 1mm 9mm; }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: .6mm; width: 6.2mm; height: 6.2mm;
+         border-radius: 50%; background: var(--teal); color: white; font-family: 'Fredoka'; font-weight: 600;
+         text-align: center; line-height: 6.2mm; font-size: 9.5pt; }
+  .toc { columns: 2; column-gap: 10mm; font-size: 11pt; }
+  .toc div { break-inside: avoid; padding: 1mm 0; border-bottom: 1px dotted #cfcbe8; }
+  .chip { display: inline-block; border-radius: 3mm; padding: .2mm 2.2mm; font-size: 8.8pt; font-weight: 700; }
+  .up { background: #dff6e6; color: #127a43; } .down { background: #fde5e5; color: #a02626; }
+  .icon-row { display: grid; grid-template-columns: 22mm 1fr; gap: 3mm; align-items: center; margin: 2mm 0; }
+  .icon-row img { width: 22mm; }
+  .small { font-size: 9pt; color: var(--muted); }
+  .center { text-align: center; }
+  .qr { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .qr .box { border: 2px solid var(--lcd); border-radius: 3mm; padding: 3mm; }
+  .qr h3 { margin-top: 0; }
+</style>
+</head>
+<body>
+
+<!-- ================================================================ COVER -->
+<section class="page">
+  <div class="cover">
+    <div class="model">GM-021</div>
+    <h1>Elfin Twins</h1>
+    <div class="sub">Instruction manual for the virtual pet<br>and its Game Boy Advance edition</div>
+    <img src="../img/toy.png" alt="Elfin Twins GM-021">
+    <div class="small">An unofficial manual. No original manual was available, so everything in it was
+      reconstructed from the toy's own program: it was run on an emulator, its screens were recorded and
+      its code was read. All screen pictures are taken from the real program.</div>
+  </div>
+</section>
+
+<!-- ================================================================ CONTENTS -->
+<section class="page">
+  <h2>Contents</h2>
+  <div class="toc">
+    <div>1. Welcome to Elfin Twins</div>
+    <div>2. Getting to know your toy</div>
+    <div>3. The screen and its icons</div>
+    <div>4. Getting started</div>
+    <div>5. The home screen and the menu</div>
+    <div>6. Food and drink</div>
+    <div>7. Games</div>
+    <div>8. Cleaning</div>
+    <div>9. The status meter</div>
+    <div>10. Outings</div>
+    <div>11. Light and bedtime</div>
+    <div>12. The doctor</div>
+    <div>13. Going out</div>
+    <div>14. The attention call "?!"</div>
+    <div>15. A day in the life of the twins</div>
+    <div>16. Growing up</div>
+    <div>17. When things go wrong</div>
+    <div>18. Playing with a friend (link)</div>
+    <div>19. Clock, sound and password</div>
+    <div>20. Money</div>
+    <div>21. Game Boy Advance edition</div>
+    <div>22. Who made Elfin Twins?</div>
+    <div>23. Quick reference</div>
+  </div>
+
+  <h2 style="margin-top:10mm">1. Welcome to Elfin Twins</h2>
+  <div class="two-6040">
+    <div>
+      <p>Elfin Twins is a pocket virtual pet from the late 1990s. Instead of one creature you look after a
+        pair of little elves, the <b>twins</b>. They arrive at the end of a short story, grow up from babies to
+        adults over about three and a half weeks, live in a house at the edge of a town and like to go out:
+        to the town and, when they are older, to the running track.</p>
+      <p>You feed them and give them drinks, keep them clean, put them to bed, call the doctor when they are
+        ill and keep them busy with games, outings and TV. Everything you do changes their mood, intelligence,
+        stamina, friendships, weight and money, and you can check all of these on the status meter.</p>
+      <p>With a second toy you can connect the two and let the twins play tug-of-war, rock-paper-scissors or
+        arm wrestling against a friend's twins.</p>
+    </div>
+    <figure><img src="../img/home.png"><figcaption>The twins at home (babies, first day).</figcaption></figure>
+  </div>
+  <div class="note"><b>About this manual.</b> Each rule is marked with the source it was taken from. Most
+    come straight from the toy's program, others from watching the emulated toy. Where the purpose of
+    something could only be guessed, the manual says so.</div>
+</section>
+
+<!-- ================================================================ TOY -->
+<section class="page">
+  <h2>2. Getting to know your toy</h2>
+  <figure><img src="../img/toy_labeled.png" style="width:150mm;margin:auto"></figure>
+  <table>
+    <tr><th style="width:26%">Button</th><th>What it does</th></tr>
+    <tr><td><span class="key">◄</span> <span class="key">►</span></td><td>Move the menu cursor, browse choices, change values.</td></tr>
+    <tr><td><span class="key">▲</span></td><td>Choose where the twins go (home, town, running track).</td></tr>
+    <tr><td><span class="key">▼</span></td><td>Cancel the choice of destination.</td></tr>
+    <tr><td><span class="key">ENTER</span></td><td>Select / confirm. Held down for about 2 s it is a "long ENTER".</td></tr>
+    <tr><td><span class="key">ESC</span></td><td>Go back / leave a screen.</td></tr>
+    <tr><td><span class="key">CLOCK</span></td><td>Show the clock. Hold it for about 2 s to stop and set the clock.</td></tr>
+    <tr><td><span class="key">ESC</span>+<span class="key">ENTER</span></td><td>Pressed together: emergency rescue, or start a new pair of twins (see chapter 17).</td></tr>
+  </table>
+  <div class="note"><b>Inside the toy.</b> The toy has only five button contacts. ▲ presses LEFT and RIGHT
+    together and ▼ presses CLOCK and ENTER together, and the program tells them apart by which contacts
+    close. A tiny buzzer plays the tunes and a two-wire socket connects two toys.</div>
+</section>
+
+<!-- ================================================================ SCREEN -->
+<section class="page">
+  <h2>3. The screen and its icons</h2>
+  <p>The middle of the screen is a grid of 29 × 16 dots where the twins, their home and all the
+    animations appear. Around it are 16 printed icons that light up when needed. The picture below shows
+    every icon lit at once, which never happens in normal play.</p>
+  <figure><img src="../img/panel_labeled.png"></figure>
+  <table>
+    <tr><th style="width:24%">Where</th><th>Icons</th><th style="width:40%">Meaning</th></tr>
+    <tr><td>Top row</td><td>Office / town · Home · Running track</td><td>Where the twins are, and their destination while you choose one.</td></tr>
+    <tr><td>Left column</td><td>Food &amp; drink · Games · Clean</td><td rowspan="3">The eight <b>menu icons</b>. One is lit while you move the cursor.</td></tr>
+    <tr><td>Right column</td><td>Light · Outings · Doctor</td></tr>
+    <tr><td>Bottom row</td><td>Status meter · Link</td></tr>
+    <tr><td>Bottom middle</td><td>?!</td><td>The twins need something (chapter 14).</td></tr>
+    <tr><td>Corners</td><td>▼ ▲ ◄ ►</td><td>Which buttons can be used right now.</td></tr>
+  </table>
+</section>
+
+<!-- ================================================================ START -->
+<section class="page">
+  <h2>4. Getting started</h2>
+  <h3>The story</h3>
+  <p>When batteries go in (or after a reset) the toy tells a short picture story that lasts about two and a half
+    minutes. It ends with the twins arriving in their new home as babies. The buttons are not used during the
+    story, so just watch.</p>
+  <figure><img src="../img/intro_seq.png"><figcaption>Scenes from the opening story.</figcaption></figure>
+  <h3>Signing your name</h3>
+  <p>At the end of the story the toy asks you to <b>SIGN NAME</b>: you can sign with up to 10 letters.</p>
+  <ul>
+    <li><span class="key">◄</span>/<span class="key">►</span> choose a letter (A–Z, a space and a few symbols).</li>
+    <li><span class="key">ESC</span> accepts the letter and moves on to the next one.</li>
+    <li><span class="key">ENTER</span> finishes. If you do nothing, the twins move in after about half a minute anyway.</li>
+  </ul>
+  <figure><img src="../img/sign_seq.png" style="width:150mm;margin:auto"><figcaption>SIGN NAME and the first letter.</figcaption></figure>
+</section>
+
+<section class="page">
+  <h3 style="margin-top:0">Setting the clock</h3>
+  <p>The toy starts at <b>12:00</b>. Set the real time, because the twins' day (mealtimes, bedtime, going
+    out) follows the clock.</p>
+  <ol class="steps">
+    <li>Press <span class="key">CLOCK</span> to show the clock.</li>
+    <li>Hold <span class="key">CLOCK</span> for about 2 seconds. The screen shows <b>CLOCK STOP</b> and time stands still.</li>
+    <li>Press <span class="key">ESC</span> to start setting the time.</li>
+    <li><span class="key">◄</span> adds one hour, <span class="key">►</span> adds one minute. Keep pressing until the time is right.</li>
+    <li>Press <span class="key">ENTER</span>. The clock starts at 0 seconds and the password screen <b>NEW P.W.</b> appears (chapter 19).
+      Leave it at <b>00</b> for no password and press <span class="key">ENTER</span>.</li>
+  </ol>
+  <figure><img src="../img/clock_seq.png"><figcaption>Clock screen (with the sound bell), sound off, CLOCK STOP, NEW P.W., password digits.</figcaption></figure>
+  <div class="tip"><b>Tip:</b> "CLOCK STOP" also works as a <b>pause</b>. While it is shown, time does not run
+    and the twins do not get older or hungrier.</div>
+</section>
+
+<!-- ================================================================ HOME / MENU -->
+<section class="page">
+  <h2>5. The home screen and the menu</h2>
+  <p>Most of the time you see the twins in their surroundings, going about their day. What they do depends on
+    their age, where they are and the time of day. Now and then they call for attention with <b>?!</b> and
+    act out what they need: yawning when sleepy, a mess when things need cleaning, or looking poorly when
+    they are sick.</p>
+  <figure><img src="../img/home_seq.png"><figcaption>A few moments at home.</figcaption></figure>
+  <h3>Using the menu</h3>
+  <p>Press <span class="key">◄</span> or <span class="key">►</span> and one of the eight menu icons lights up. Each
+    press moves to the next icon, round the screen in this order:</p>
+  <figure><img src="../img/menu_ring.png"><figcaption>Food &amp; drink → Games → Clean → Status meter → Link → Doctor → Outings → Light.</figcaption></figure>
+  <p>Press <span class="key">ENTER</span> to open the lit icon. Inside a screen, <span class="key">◄</span>/<span class="key">►</span>
+    browse, <span class="key">ENTER</span> chooses and <span class="key">ESC</span> goes back. If you leave the toy alone for
+    two minutes inside a screen, it goes back to the home screen by itself.</p>
+  <div class="tip"><b>Tip:</b> While the twins are in the middle of an animation, a button press is
+    sometimes ignored. Just press it again.</div>
+</section>
+
+<!-- ================================================================ FOOD -->
+<section class="page">
+  <h2>6. Food and drink</h2>
+  <p>Open <b>Food &amp; drink</b> (knife and fork). Three things to eat or drink are offered and the screen
+    moves from one to the next every few seconds. Wait for the one you want, or pick it with
+    <span class="key">◄</span>/<span class="key">►</span>, then press <span class="key">ENTER</span>. Press
+    <span class="key">ESC</span> to leave.</p>
+  <figure><img src="../img/food_choices.png"><figcaption>The three choices for babies at home.</figcaption></figure>
+  <table>
+    <tr><th>Choice</th><th>What it does</th></tr>
+    <tr><td>Left and right: <b>meals</b></td><td>Fill the tummy and give <span class="chip up">+ stamina</span>. Some meals
+      also add weight. When the tummy is full (after about five meals) the twins refuse more food.</td></tr>
+    <tr><td>Middle: <b>drinks</b></td><td>Quench thirst and give <span class="chip up">+ stamina</span>. Always accepted.
+      For older twins at home the drink is a stronger one (probably coffee): <span class="chip up">+ IQ</span>
+      <span class="chip down">− mood</span>, and it costs $100.</td></tr>
+  </table>
+  <figure><img src="../img/food_eat.png"><figcaption>Dinner time.</figcaption></figure>
+  <p>What is offered depends on the twins' age (babies and children, or teenagers and adults) and on whether
+    they are at home or out in town. At the running track they refuse to eat.</p>
+  <div class="tip"><b>Tip:</b> In the morning the twins wake up with an empty tummy and thirsty, so give them
+    breakfast and a drink. Over the day they digest, and a digested meal eventually means a mess to clean.</div>
+</section>
+
+<!-- ================================================================ GAMES -->
+<section class="page">
+  <h2>7. Games</h2>
+  <p>Open <b>Games</b> (the little handheld console). Choose one of the two games with
+    <span class="key">◄</span>/<span class="key">►</span> and press <span class="key">ENTER</span>.</p>
+  <figure><img src="../img/game_choices.png" style="width:120mm;margin:auto"><figcaption>The two games: find the heart, and the lucky reels.</figcaption></figure>
+  <h3>Find the heart</h3>
+  <p>One of three hearts is hollow. Watch it, because the hearts are shuffled. When the arrow appears, move it
+    under the hollow heart with <span class="key">◄</span>/<span class="key">►</span> and press <span class="key">ENTER</span>.</p>
+  <figure><img src="../img/game_shell.png"><figcaption>The hearts are shuffled; keep your eye on the hollow one.</figcaption></figure>
+  <h3>Lucky reels</h3>
+  <p>Three reels spin like a slot machine. Press <span class="key">ENTER</span> to stop them.</p>
+  <figure><img src="../img/game_slots.png" style="width:85mm;margin:auto"></figure>
+  <p class="small">Games mostly affect <b>IQ</b> and <b>stamina</b>. In our tests a round raised or lowered them
+    depending on the result.</p>
+</section>
+
+<!-- ================================================================ CLEAN + METER -->
+<section class="page">
+  <h2>8. Cleaning</h2>
+  <p>Open <b>Clean</b> (the rake) when the twins or their room are dirty: after they have digested a few meals,
+    or when the room is messy. They get a bath and are happy again. If nothing needs cleaning they just say
+    no.</p>
+  <figure><img src="../img/clean_seq.png"><figcaption>Bath time.</figcaption></figure>
+  <div class="warn">Leaving a mess costs money ($200 each time it builds up) and makes the twins ill.</div>
+
+</section>
+
+<section class="page">
+  <h2>9. The status meter</h2>
+  <p>Open the <b>Status meter</b> (the dial). Its eight pages come up one after another. Browse with
+    <span class="key">◄</span>/<span class="key">►</span>, press <span class="key">ENTER</span> to see the value, and
+    <span class="key">ESC</span> to leave.</p>
+  <figure><img src="../img/meter_pages.png"></figure>
+  <table>
+    <tr><th style="width:22%">Page</th><th style="width:22%">Shows</th><th>Notes</th></tr>
+    <tr><td>Baby face</td><td>Growth</td><td>Adults show a special portrait here.</td></tr>
+    <tr><td>Birthday cake</td><td>Age</td><td>Shown as "YR" but counted in <b>days</b>: one toy day is one "year".</td></tr>
+    <tr><td>Scales</td><td>Weight in kg</td><td>Starts at 8 kg. Meals add weight; hunger and late bedtimes reduce it.</td></tr>
+    <tr><td>Flowers</td><td>Mood</td><td rowspan="4">Shown as 0–99. Each drops by one point a day on its own; raise them with games, outings and play.</td></tr>
+    <tr><td>IQ</td><td>Intelligence</td></tr>
+    <tr><td>Sneaker</td><td>Stamina</td></tr>
+    <tr><td>People</td><td>Friendship</td></tr>
+    <tr><td>Banknote</td><td>Money</td><td>Starts at $2400 (chapter 20).</td></tr>
+  </table>
+  <figure><img src="../img/meter_values.png"><figcaption>Values for a new pair: age, weight 8 kg, mood 33, IQ 21, stamina 42, friendship 36, money $2400.</figcaption></figure>
+</section>
+
+<!-- ================================================================ OUTINGS -->
+<section class="page">
+  <h2>10. Outings</h2>
+  <p>Open <b>Outings</b> (the little picture of someone at the seaside) to give the twins something to do.
+    Pick an activity with <span class="key">◄</span>/<span class="key">►</span> and press <span class="key">ENTER</span>.
+    At home the choices are:</p>
+  <figure><img src="../img/activity_choices.png"><figcaption>Watch TV · Listen to music · Read and learn.</figcaption></figure>
+  <table>
+    <tr><th>Activity</th><th>Effect</th></tr>
+    <tr><td>TV</td><td><span class="chip up">+ friendship</span> <span class="chip down">− $100</span></td></tr>
+    <tr><td>Music</td><td><span class="chip up">+ mood</span> <span class="chip down">− $100</span></td></tr>
+    <tr><td>Reading / learning</td><td><span class="chip up">+ IQ</span> <span class="chip down">− friendship</span></td></tr>
+  </table>
+  <figure><img src="../img/activity_music.png"><figcaption>Music makes the twins happy.</figcaption></figure>
+  <p>Older twins, and twins out in town, get other activities. The program has twelve in total. We could
+    measure their effects but not all their names, so the names below are our best guesses:</p>
+  <table>
+    <tr><th>Kind of activity</th><th>Effect</th></tr>
+    <tr><td>Work (three kinds)</td><td><span class="chip up">+ money</span> and <span class="chip up">+ IQ</span>, <span class="chip up">+ friendship</span> or <span class="chip up">+ mood</span></td></tr>
+    <tr><td>Sport (three kinds)</td><td><span class="chip up">+ stamina</span>, and the tummy or thirst goes down</td></tr>
+    <tr><td>Hard work</td><td><span class="chip up">+ $300</span> <span class="chip down">− stamina</span></td></tr>
+    <tr><td>Party</td><td><span class="chip up">+ 2 mood</span> <span class="chip up">+ 2 friendship</span> <span class="chip down">− $400</span></td></tr>
+    <tr><td>Lessons</td><td><span class="chip up">+ 2 IQ</span> <span class="chip down">− $200</span></td></tr>
+  </table>
+  <p class="small">Some activities include a small challenge. Get it right to earn the benefit; get it wrong and
+    it costs $100.</p>
+</section>
+
+<!-- ================================================================ LIGHT -->
+<section class="page">
+  <h2>11. Light and bedtime</h2>
+  <p>From <b>10 pm</b> (22:00) the twins get sleepy. They yawn and <b>?!</b> lights up. Open <b>Light</b>
+    (the lamp) and press <span class="key">ENTER</span> to turn off the light and put them to bed. During the
+    day the lamp does nothing.</p>
+  <figure><img src="../img/morning_seq.png"><figcaption>Lights out: the twins sleep under the moon and stars.</figcaption></figure>
+  <table>
+    <tr><th style="width:24%">Time</th><th>What happens</th></tr>
+    <tr><td>from 22:00</td><td>Sleepy: "?!" and yawning. Time to turn off the light.</td></tr>
+    <tr><td>23:00</td><td>If you have not put them to bed they fall asleep by themselves, but lose 1 kg (a late night is not good for them).
+      Putting them to bed yourself gives <span class="chip up">+1 kg</span> instead.</td></tr>
+    <tr><td>07:00</td><td>The alarm rings and the twins stretch.</td></tr>
+    <tr><td>08:00</td><td>They are up with an empty tummy, thirsty and 1 kg lighter, ready for breakfast.</td></tr>
+  </table>
+  <div class="tip"><b>Tip:</b> The sleeping hours really are sleeping hours: at night the twins do not need
+    anything, so their day starts fresh in the morning.</div>
+
+</section>
+
+<section class="page">
+  <h2>12. The doctor</h2>
+  <p>Twins who go hungry or live in a mess become ill. They look poorly and <b>?!</b> lights up. Open the
+    <b>Doctor</b> (the medical bag) and an ambulance takes them to hospital, where they are cured.</p>
+  <figure><img src="../img/doctor_seq.png"><figcaption>The ambulance comes for the twins.</figcaption></figure>
+  <p>Treatment costs $100 ($200 if they were very ill) and the twins come back a little weaker: stamina, IQ and
+    weight drop a bit, and after a serious illness mood does too. If they are not ill, the doctor is not needed and
+    they say no.</p>
+  <div class="warn">Illness gets worse every hour and costs money. If it is left too long, the twins collapse (chapter 17).</div>
+</section>
+
+<!-- ================================================================ GOING OUT -->
+<section class="page">
+  <h2>13. Going out</h2>
+  <p>The twins can live their day at <b>home</b>, go to <b>town</b> (the office building icon) and, once they
+    are no longer babies, go to the <b>running track</b>.</p>
+  <ol class="steps">
+    <li>Press <span class="key">▲</span>. The top row starts to blink.</li>
+    <li>Choose the destination with <span class="key">◄</span>/<span class="key">►</span>.</li>
+    <li>Press <span class="key">ENTER</span> to go. <span class="key">▼</span> cancels.</li>
+  </ol>
+  <figure><img src="../img/travel_seq.png"><figcaption>Off to town by car.</figcaption></figure>
+  <p>Where the twins are changes what they do and what the menus offer (food is different in town, for
+    example, and nobody eats at the running track). After 6 pm (18:00) the only destination is home, and at
+    8 pm (20:00) twins who are still out come home by themselves.</p>
+
+</section>
+
+<section class="page">
+  <h2>14. The attention call "?!"</h2>
+  <p>The <b>?!</b> icon lights up, with a beep when it first appears, whenever at least one of these is true:</p>
+  <table>
+    <tr><th style="width:42%">Reason</th><th>What to do</th></tr>
+    <tr><td>Hungry (empty tummy)</td><td>Food: a meal.</td></tr>
+    <tr><td>Thirsty</td><td>Food: the middle choice (a drink).</td></tr>
+    <tr><td>Dirty, or the room is messy</td><td>Clean.</td></tr>
+    <tr><td>Ill</td><td>Doctor.</td></tr>
+    <tr><td>Money below $1000</td><td>Earn money with outings (work).</td></tr>
+    <tr><td>Bedtime (after 22:00)</td><td>Light off.</td></tr>
+    <tr><td>Just woken up (7–8 am)</td><td>Wait a moment, then breakfast.</td></tr>
+  </table>
+  <div class="two">
+    <figure><img src="../img/alert_dirty.png"><figcaption>Something needs cleaning.</figcaption></figure>
+    <figure><img src="../img/alert_sick.png"><figcaption>The twins are not well.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ================================================================ DAY -->
+<section class="page">
+  <h2>15. A day in the life of the twins</h2>
+  <p>The twins' needs change with time. This is how the program ages them:</p>
+  <table>
+    <tr><th style="width:26%">How often</th><th>What changes</th></tr>
+    <tr><td>Every 30 minutes</td><td>They get a little thirstier and lose a little stamina.</td></tr>
+    <tr><td>Every hour</td><td>A meal is digested and a little mess builds up. With an <b>empty tummy</b>
+      they lose stamina and weight and start to get ill instead.</td></tr>
+    <tr><td>When messy</td><td>Each time the mess builds up it costs $200 and makes them a bit more ill.</td></tr>
+    <tr><td>While ill</td><td>Every hour: a bit more ill, a little weaker in every way, and $200 goes to medicine.</td></tr>
+    <tr><td>Every day</td><td>A birthday: they are one "year" (day) older, and mood, IQ, stamina and friendship each drop by one point.</td></tr>
+    <tr><td>Once a day</td><td>For a while the room gets untidy and needs cleaning.</td></tr>
+  </table>
+  <h3>A good daily routine</h3>
+  <ol class="steps">
+    <li><b>8:00</b> Breakfast: a meal and a drink.</li>
+    <li><b>Morning</b> Go to town or the running track, or play a game or have an outing.</li>
+    <li><b>Midday and afternoon</b> A meal and a drink every few hours. Clean when "?!" asks for it.</li>
+    <li><b>Evening</b> Home before 20:00, then music, TV or games.</li>
+    <li><b>22:00</b> Light off.</li>
+  </ol>
+  <div class="tip"><b>Tip:</b> Check the status meter every day. Mood, IQ, stamina and friendship only go up
+    if you do something for them.</div>
+</section>
+
+<!-- ================================================================ GROWING -->
+<section class="page">
+  <h2>16. Growing up</h2>
+  <p>Every 24 hours, counted from the moment the twins arrived, they have a <b>birthday</b>. A cake appears
+    and they grow a day ("year") older. As they get older they move on through four stages, and their home,
+    their games and what they do change with them:</p>
+  <figure><img src="../img/stages.png"><figcaption>Babies (days 1–3) · Children (days 4–8) · Teenagers (days 9–15) · Adults (day 16 onwards).</figcaption></figure>
+  <figure><img src="../img/birthday_seq.png"><figcaption>Happy birthday!</figcaption></figure>
+  <h3>How long do the twins stay?</h3>
+  <p>When the twins arrive, the toy decides how many days they will stay: <b>23 to 26 days</b>. When that day
+    comes the story ends with a farewell portrait of the twins as adults.</p>
+  <figure><img src="../img/ending_seq.png" style="width:95mm;margin:auto"><figcaption>The farewell.</figcaption></figure>
+  <p>Press <span class="key">ESC</span>+<span class="key">ENTER</span> together to welcome a new pair of twins. The clock keeps its time.</p>
+</section>
+
+<!-- ================================================================ TROUBLE -->
+<section class="page">
+  <h2>17. When things go wrong</h2>
+  <p>If the twins stay ill for too long (hungry, dirty, never visited by the doctor) or if the money runs out,
+    they <b>collapse</b>. The screen shows them lying down and no menus work.</p>
+  <figure><img src="../img/collapse_seq.png" style="width:95mm;margin:auto"><figcaption>The twins have collapsed.</figcaption></figure>
+  <h3>Emergency rescue</h3>
+  <p>Press <span class="key">ESC</span> and <span class="key">ENTER</span> <b>at the same time</b>. The ambulance takes
+    them to hospital and they come back healthy. The rescue has a price: their money is reset to $2000 and
+    mood, IQ, stamina and friendship each drop by 7 points.</p>
+  <figure><img src="../img/revive_seq.png"><figcaption>Rescued!</figcaption></figure>
+  <div class="warn"><b>24 hours:</b> if nobody rescues them within a day, the twins are gone for good. Then
+    <span class="key">ESC</span>+<span class="key">ENTER</span> starts a new pair.</div>
+  <h3>If the buttons seem to do nothing</h3>
+  <ul>
+    <li>The twins may be in the middle of an animation: press again.</li>
+    <li>At night they are asleep and most things wait until morning.</li>
+    <li>If a password is set, the toy may be asking for it (chapter 19).</li>
+    <li>"CLOCK STOP" may be on: finish setting the clock with <span class="key">ESC</span> … <span class="key">ENTER</span>.</li>
+  </ul>
+</section>
+
+<!-- ================================================================ LINK -->
+<section class="page">
+  <h2>18. Playing with a friend (link)</h2>
+  <p>Two Elfin Twins can be connected with a link cable, so the twins can play against a friend's twins.
+    The toy calls this "linking", and the Link icon shows two figures joined by an arc.</p>
+  <ol class="steps">
+    <li>Connect the two toys (or two Game Boy Advance systems, see chapter 21).</li>
+    <li>On <b>one</b> toy, open the <b>Link</b> icon and press <span class="key">ENTER</span>. It calls the other toy.</li>
+    <li>The other toy answers <b>by itself</b> and both show the link screen.</li>
+    <li>On the calling toy choose a game with <span class="key">◄</span>/<span class="key">►</span> and press <span class="key">ENTER</span>. Both toys play it together.</li>
+    <li>After a game the link screen comes back. Choose another, or press <span class="key">ESC</span> to end.</li>
+  </ol>
+  <figure><img src="../img/link_menu.png"><figcaption>Tug-of-war · Rock-paper-scissors · Arm wrestling.</figcaption></figure>
+  <div class="two">
+    <figure><img src="../img/link_game_a.png"><figcaption>Tug-of-war on the calling toy…</figcaption></figure>
+    <figure><img src="../img/link_game_b.png"><figcaption>…and on the friend's toy at the same time.</figcaption></figure>
+  </div>
+  <p>Playing together raises <span class="chip up">+ IQ</span> <span class="chip up">+ stamina</span>
+    <span class="chip up">+ friendship</span>. A score such as "0 vs 0" is kept for the session.</p>
+  <p class="small">If the other toy does not answer within a few seconds, the calling toy gives up and goes back
+    home. Try again once both toys are on the home screen.</p>
+</section>
+
+<!-- ================================================================ CLOCK / SOUND / PW -->
+<section class="page">
+  <h2>19. Clock, sound and password</h2>
+  <h3>The clock screen</h3>
+  <p>Press <span class="key">CLOCK</span> to see the time, with seconds and AM/PM. Press <span class="key">ESC</span>
+    to go back. To set the time, see chapter 4.</p>
+  <h3>Sound on and off</h3>
+  <p>On the clock screen, <span class="key">◄</span> turns the sound <b>off</b> (the bell disappears) and
+    <span class="key">►</span> turns it back <b>on</b>.</p>
+  <h3>The password lock</h3>
+  <p>After the clock has been set, the toy asks for a <b>NEW P.W.</b> (new password): two digits.
+    <span class="key">◄</span> changes the first digit, <span class="key">►</span> the second, and
+    <span class="key">ENTER</span> confirms.</p>
+  <ul>
+    <li><b>00</b> means no password. Leave it like that if you don't need one.</li>
+    <li>With a password, the toy locks after <b>4 minutes</b> without a button press. The next press asks for the
+      password, and only the right one gives access. Handy if you don't want anyone else playing with your
+      twins.</li>
+  </ul>
+  <div class="warn">Write your password down. The program does not show it anywhere.</div>
+  <div class="note"><b>A secret from the programmers.</b> If you sign the name <b>SCD</b>, two spaces, then <b>TEST</b>,
+    the toy starts in its factory <b>test mode</b>. On the home screen (with no menu icon lit)
+    <span class="key">ENTER</span> then makes the twins a day older, <span class="key">ESC</span> moves the clock on by
+    10 minutes and a long <span class="key">ESC</span> changes their stage. It is fun for seeing the whole life
+    story quickly, but it spoils the real game.</div>
+
+  <h2 style="margin-top:6mm">20. Money</h2>
+  <p>A new pair starts with <b>$2400</b>. Money pays for TV and music, the doctor and parties, and a mess in
+    the house costs money too. Work outings bring money in. Keep an eye on the banknote page of the status
+    meter: below $1000, "?!" warns you, and <b>at $0 the twins collapse</b>.</p>
+  <table>
+    <tr><th>Costs</th><th>Earns</th></tr>
+    <tr><td>TV, music: $100 · doctor: $100–200 · parties: $400 · lessons: $200 · a mess: $200 · every hour of illness: $200 · strong drinks: $100</td>
+        <td>Work outings: +$100 each (hard work +$300). Emergency rescue resets money to $2000.</td></tr>
+  </table>
+</section>
+
+<!-- ================================================================ GBA -->
+<section class="page">
+  <h2>21. Game Boy Advance edition</h2>
+  <p>The GBA edition runs the <b>original program</b> of the toy on an emulated copy of its microcontroller, so the
+    twins behave exactly as on the real toy. It adds saving, living on while the GBA is off, a settings
+    menu and the link cable.</p>
+  <div class="two">
+    <figure><img src="../img/gba_home.png"><figcaption>On the GBA screen.</figcaption></figure>
+    <figure><img src="../img/gba_menu.png"><figcaption>START opens the settings.</figcaption></figure>
+  </div>
+  <table>
+    <tr><th style="width:30%">GBA</th><th>Toy button</th></tr>
+    <tr><td><span class="key gba">A</span></td><td>ENTER</td></tr>
+    <tr><td><span class="key gba">B</span></td><td>ESC</td></tr>
+    <tr><td><span class="key gba">✚ D-pad</span></td><td>▲ ▼ ◄ ►</td></tr>
+    <tr><td><span class="key gba">SELECT</span> <span class="key gba">L</span> <span class="key gba">R</span></td><td>CLOCK</td></tr>
+    <tr><td><span class="key gba">A</span>+<span class="key gba">B</span></td><td>ESC+ENTER (rescue / new twins)</td></tr>
+    <tr><td><span class="key gba">START</span></td><td>Settings menu (the twins keep living while it is open)</td></tr>
+  </table>
+  <h3>While the GBA is off</h3>
+  <p>With a flashcart that has a real-time clock, the twins <b>keep living while the GBA is switched off</b>.
+    At power-on the game works out how long it has been and lets the twins live through that time in a
+    few seconds, exactly as the toy would have done. So feed them before you switch off.</p>
+  <figure><img src="../img/gba_away.png" style="width:78mm;margin:auto"><figcaption>At power-on after a night away.</figcaption></figure>
+</section>
+
+<section class="page">
+  <h2>Game Boy Advance edition: settings</h2>
+  <table>
+    <tr><th style="width:32%">Setting</th><th>What it does</th></tr>
+    <tr><td>Sound</td><td>Buzzer on or off.</td></tr>
+    <tr><td>Link cable</td><td>Which wire of the GBA link cable is used (<b>SD</b>, <b>SC</b>) or off.</td></tr>
+    <tr><td>Time while off</td><td><b>real time</b> (the twins live on), <b>max 1 day</b>, or <b>paused</b> (nothing happens while off).</td></tr>
+    <tr><td>Pet clock = RTC</td><td><b>auto</b> sets the toy's clock from the cartridge clock at every start, so you never set it by hand.</td></tr>
+    <tr><td>LCD fade</td><td>Off by default. When on, the dots fade in and out softly, like a slow LCD. The toy's program only draws plain on/off dots, so this is purely for looks.</td></tr>
+    <tr><td>Set cartridge clock</td><td>Set the flashcart's real-time clock.</td></tr>
+    <tr><td>Save now / New pet</td><td>Save immediately / start over.</td></tr>
+  </table>
+  <p class="small">The game saves by itself a few seconds after you press a button, and once a minute.</p>
+</section>
+
+<section class="page">
+  <h2>Game Boy Advance edition: link cable</h2>
+  <ol class="steps">
+    <li>Put <b>elfin-twins.gba</b> on both flashcarts and connect the GBAs with a GBA link cable.</li>
+    <li>Leave <b>Link cable</b> on <b>SD wire</b> on both, and play as in chapter 18.</li>
+    <li>If the other GBA never answers, run <b>elfin-linktest.gba</b> on both first (next section). If it reports
+      "SD idles LOW", switch both games to <b>SC wire</b>.</li>
+  </ol>
+  <h3>The link and clock test (elfin-linktest.gba)</h3>
+  <p>A small test program for your hardware. Run it on both GBAs with the cable connected:</p>
+  <ul>
+    <li><b>SD / SC idle HIGH</b>: the wire can be used.</li>
+    <li>Press <span class="key gba">L</span> on one GBA: the other should report a <b>burst of 12 edges</b> on SD.
+      <span class="key gba">R</span> does the same on SC.</li>
+    <li><span class="key gba">A</span> / <span class="key gba">B</span> hold SD / SC low: the level shown on the other GBA should change.</li>
+    <li><b>RTC</b> shows the date and time and should keep ticking. "NOT FOUND" means the flashcart's clock is
+      switched off for this game in the loader menu.</li>
+  </ul>
+  <h3>Troubleshooting</h3>
+  <table>
+    <tr><th style="width:36%">Problem</th><th>Try this</th></tr>
+    <tr><td>No time passes while off</td><td>Turn on the RTC for this game in the flashcart menu. Check "Time while off".</td></tr>
+    <tr><td>"no pull-up seen" in the menu</td><td>Nothing seems to be connected, or the wire doesn't idle high. Check the cable, then try SC.</td></tr>
+    <tr><td>The pet is not saved</td><td>Use SRAM saving for this game in the flashcart menu. Some flashcarts only write the save to the SD card at the next start.</td></tr>
+    <tr><td>The pet clock is wrong</td><td>Set the cartridge clock (settings), and use "Pet clock = RTC: auto".</td></tr>
+  </table>
+</section>
+
+<!-- ================================================================ WHO MADE IT -->
+<section class="page">
+  <h2>22. Who made Elfin Twins?</h2>
+  <p>No box, leaflet or label naming the maker of the GM-021 has turned up. But the program inside the toy has a
+    signature. The last bytes before the end of its memory hold one line of text, which the toy never shows:</p>
+  <p class="center" style="font-family:'Fredoka';font-size:15pt;color:var(--purple-d);margin:4mm 0">
+    Sparkle Crystal Development Co.,Ltd. &nbsp;WangLaXian &nbsp;1996.11.16</p>
+  <figure><img src="../img/credit.png" style="width:165mm;margin:auto">
+    <figcaption>The credit as stored in the toy. Each letter is saved as its normal computer code plus 32, so the text does
+      not show up when you search the memory for words. Subtract 32 and it reads plainly.</figcaption></figure>
+  <ul>
+    <li><b>Sparkle Crystal Development Co., Ltd.</b> is most likely the company that wrote the program. The toy's
+      secret test name <b>SCD&nbsp;&nbsp;TEST</b> (chapter 19) matches its initials: <b>S</b>parkle <b>C</b>rystal
+      <b>D</b>evelopment.</li>
+    <li><b>WangLaXian</b> looks like a Chinese personal name written in pinyin (Wang La-xian), almost certainly the
+      programmer who signed the work.</li>
+    <li><b>16 November 1996</b> is probably when the program was finished: about a week before the first Tamagotchi went
+      on sale in Japan, and months before the wave of virtual pets of 1997.</li>
+  </ul>
+  <div class="two" style="margin-top:3mm">
+    <div>
+      <h3>A chip from Sunplus</h3>
+      <p>The toy's brain is a Sunplus SPLB20 chip. Its first kilobyte holds Sunplus's own factory test program, the same in
+        every SPLB20 toy we have looked at. At the factory, a tester could use it to check the screen, the buzzer, the memory
+        and the program itself before the chip went into a toy. One of its screen tests even writes
+        <b>SUNPLU…</b> across the display.</p>
+    </div>
+    <div>
+      <figure style="margin-top:2mm"><img src="../img/factory_lcd.png">
+        <figcaption>Factory screen tests: all segments on (left) and Sunplus's test picture (right), recorded by running
+          the test program on the emulator.</figcaption></figure>
+    </div>
+  </div>
+  <div class="note"><b>Still unknown.</b> Nothing about Sparkle Crystal Development could be found online: not its
+    location, its other products, or what became of it. Of the thirty-odd toys dumped for the BrickEmuPy emulator, only
+    Elfin Twins carries this signature. <i>Apollo Prince &amp; Princess</i> stores its letters in exactly the same way,
+    and 16 of its 26 letters are identical, but that is not enough to say it came from the same studio. If you own an Elfin
+    Twins in its box, the packaging may name the distributor. Company registries (for example Hong Kong's) could show when
+    the firm existed.</div>
+</section>
+
+<!-- ================================================================ QUICK REF -->
+<section class="page">
+  <h2>23. Quick reference</h2>
+  <div class="qr">
+    <div class="box"><h3>Menu (◄ ► then ENTER)</h3>
+      <p>🍴 <b>Food &amp; drink</b>: meals left/right, drink in the middle<br>
+      🎮 <b>Games</b>: find the heart, lucky reels<br>
+      🧹 <b>Clean</b>: when dirty or messy<br>
+      ⏲ <b>Status meter</b>: 8 pages<br>
+      🔗 <b>Link</b>: play with a friend<br>
+      🩺 <b>Doctor</b>: when ill<br>
+      🏖 <b>Outings</b>: TV, music, reading, work, sport…<br>
+      💡 <b>Light</b>: bedtime after 22:00</p></div>
+    <div class="box"><h3>Buttons</h3>
+      <p><b>▲</b> choose a destination · <b>▼</b> cancel<br>
+      <b>CLOCK</b> clock · hold: stop / set the clock<br>
+      On the clock: <b>◄</b> sound off · <b>►</b> sound on<br>
+      Setting: <b>◄</b> hour +1 · <b>►</b> minute +1 · <b>ENTER</b> start<br>
+      <b>ESC+ENTER</b>: rescue / new twins</p></div>
+    <div class="box"><h3>The twins' day</h3>
+      <p>08:00 up, hungry and thirsty<br>
+      Out: before 18:00, back by 20:00<br>
+      22:00 sleepy: light off<br>
+      Light off on time: +1 kg · 23:00 they fall asleep anyway: −1 kg<br>
+      07:00 the alarm rings</p></div>
+    <div class="box"><h3>Life</h3>
+      <p>Babies days 1–3 · children 4–8 · teenagers 9–15 · adults 16+<br>
+      A birthday every 24 h<br>
+      Stay: 23–26 days<br>
+      Collapse: ill too long, or $0<br>
+      Rescue: ESC+ENTER within 24 h</p></div>
+  </div>
+  <p class="small center" style="margin-top:10mm">Elfin Twins GM-021 manual, reconstructed in 2026 from the toy's program with the BrickEmuPy
+    emulator (reverse engineering of the device by azya52; device provided by t.me/oksiniah) and the Game Boy Advance port in this
+    repository. Elfin Twins is the property of its respective owners; this is an unofficial fan document.</p>
+</section>
+
+</body>
+</html>

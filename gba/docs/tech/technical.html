@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Elfin Twins GM-021 - Technical Reference</title>
+<link rel="stylesheet" href="../fonts/fonts.css">
+<style>
+  @page { size: A4; margin: 17mm 17mm 18mm 17mm; }
+  :root { --ink: #1d1b2b; --muted: #5f5c75; --acc: #4b3fa8; --acc2: #16a38a; --rule: #dcd9ec; --code: #f4f3fa; }
+  html { background: #fff; }
+  body { margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 10pt; line-height: 1.45; color: var(--ink); }
+  h1, h2, h3, h4, th, .sans, figcaption, .toc { font-family: 'Inter', sans-serif; }
+  h1 { font-size: 26pt; line-height: 1.1; margin: 0 0 3mm; color: var(--acc); }
+  h2 { font-size: 15pt; margin: 8mm 0 2.5mm; color: var(--acc); border-bottom: 2px solid var(--rule); padding-bottom: 1.2mm; break-after: avoid; }
+  h3 { font-size: 11.5pt; margin: 5mm 0 1.5mm; break-after: avoid; }
+  h4 { font-size: 10pt; margin: 3.5mm 0 1mm; color: var(--muted); break-after: avoid; }
+  p { margin: 0 0 2.2mm; text-align: justify; hyphens: auto; }
+  code, pre, .mono { font-family: 'JetBrains Mono', monospace; font-size: 8.4pt; }
+  code { background: var(--code); padding: 0 .6mm; border-radius: .6mm; }
+  pre { background: var(--code); padding: 2.5mm 3mm; border-radius: 1.5mm; line-height: 1.35; white-space: pre-wrap; break-inside: avoid; margin: 2mm 0 3mm; }
+  table { border-collapse: collapse; width: 100%; margin: 2mm 0 3.5mm; font-size: 8.7pt; break-inside: auto; }
+  th { background: #efedf8; text-align: left; padding: 1.1mm 1.8mm; font-weight: 600; font-size: 8.2pt; }
+  td { padding: 1mm 1.8mm; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  tr { break-inside: avoid; }
+  table.compact td, table.compact th { padding: .6mm 1.4mm; font-size: 7.9pt; }
+  table.matrix { font-family: 'JetBrains Mono', monospace; font-size: 5.6pt; table-layout: fixed; }
+  table.matrix td, table.matrix th { padding: .3mm .2mm; text-align: center; border: 1px solid #ecebf5; }
+  table.matrix sub { font-size: 4.6pt; color: var(--acc); }
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+  .page { break-after: page; }
+  .title { height: 250mm; display: flex; flex-direction: column; justify-content: center; }
+  .title .sub { font-family: 'Inter'; font-size: 13pt; color: var(--muted); margin-bottom: 10mm; }
+  .title img { width: 70mm; }
+  .meta { font-family: 'Inter'; font-size: 9pt; color: var(--muted); margin-top: 10mm; }
+  figure { margin: 3mm 0; break-inside: avoid; }
+  figure img { max-width: 100%; display: block; margin: auto; }
+  figcaption { font-size: 8.3pt; color: var(--muted); text-align: center; margin-top: 1.2mm; }
+  .box { border: 1px solid var(--rule); border-left: 4px solid var(--acc2); padding: 2.2mm 3mm; border-radius: 1.2mm; margin: 3mm 0; background: #fbfbfe; break-inside: avoid; }
+  .box.warn { border-left-color: #d98a24; }
+  .conf { font-family: 'Inter'; font-size: 7.4pt; font-weight: 600; border-radius: 1mm; padding: 0 1.2mm; white-space: nowrap; }
+  .c-code { background: #dff4ea; color: #16613e; } .c-obs { background: #e6eefc; color: #274c94; } .c-inf { background: #fdf0dc; color: #8a5510; }
+  .toc { columns: 2; column-gap: 8mm; font-size: 9.3pt; }
+  .toc div { padding: .6mm 0; border-bottom: 1px dotted var(--rule); break-inside: avoid; }
+  .flow { display: grid; gap: 1.6mm; font-family: 'Inter'; font-size: 8pt; margin: 3mm 0; break-inside: avoid; }
+  .flow .n { border: 1.5px solid var(--acc); border-radius: 1.5mm; padding: 1.4mm 2mm; background: #f7f6fd; }
+  .flow .n b { color: var(--acc); }
+  .arrow { text-align: center; color: var(--acc); font-size: 10pt; line-height: 1; }
+  .kv { display: grid; grid-template-columns: 38mm 1fr; gap: .6mm 3mm; font-size: 9pt; }
+  .kv div:nth-child(odd) { font-family: 'Inter'; font-weight: 600; color: var(--muted); }
+  .seq { font-family: 'JetBrains Mono', monospace; font-size: 7.8pt; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ TITLE -->
+<section class="page title">
+  <h1>Elfin Twins GM-021<br>Technical Reference</h1>
+  <div class="sub">Hardware, firmware and game logic of a 1990s virtual pet,<br>and the architecture of its Game Boy Advance port</div>
+  <img src="../img/toy.png" alt="">
+  <div class="meta">
+    Reconstructed from the device ROM (<code>assets/ElfinTwins.bin</code>, 32 KB) with BrickEmuPy, a C port of its
+    SPLB20 core, an analysis disassembler and instrumented emulation.<br>
+    Companion files: <code>gba/docs/analysis/elfin_twins.asm</code> (annotated disassembly of the whole ROM),
+    <code>gba/tools/elfin_symbols.py</code> (symbol table), <code>gba/host/*</code> (verification and analysis
+    tools).<br>September 2026.
+  </div>
+</section>
+
+<!-- ============================================================ TOC -->
+<section class="page">
+  <h2 style="margin-top:0">Contents</h2>
+  <div class="toc">
+    <div>1 Scope, sources and method</div>
+    <div>2 Hardware</div>
+    <div>2.1 Microcontroller and memory map</div>
+    <div>2.2 Special function registers</div>
+    <div>2.3 Interrupts, sleep and wake-up</div>
+    <div>2.4 Timers and buzzer</div>
+    <div>2.5 Port A: buttons, link line, buzzer</div>
+    <div>2.6 LCD</div>
+    <div>2.7 Instruction set</div>
+    <div>3 Firmware architecture</div>
+    <div>3.1 Control flow</div>
+    <div>3.2 Timekeeping</div>
+    <div>3.3 Key decoder</div>
+    <div>3.4 Game modes and dispatch tables</div>
+    <div>3.5 Menu and icons</div>
+    <div>3.6 Graphics, animation and sound engines</div>
+    <div>4 Game state (RAM map)</div>
+    <div>5 Game rules</div>
+    <div>5.1 Statistics</div>
+    <div>5.2 Periodic rules</div>
+    <div>5.3 Care actions</div>
+    <div>5.4 Day, night and locations</div>
+    <div>5.5 Life cycle</div>
+    <div>5.6 Password, clock stop, test mode</div>
+    <div>6 Link protocol</div>
+    <div>7 Game Boy Advance port</div>
+    <div>7.1 Overview</div>
+    <div>7.2 Core port and verification</div>
+    <div>7.3 Performance</div>
+    <div>7.4 Display, input, sound</div>
+    <div>7.5 Link bridge</div>
+    <div>7.6 RTC catch-up</div>
+    <div>7.7 Saving</div>
+    <div>7.8 Build and test tooling</div>
+    <div>8 Provenance: who made it</div>
+    <div>8.1 The hidden credit</div>
+    <div>8.2 Sunplus factory test program</div>
+    <div>8.3 Other toys, and what is not known</div>
+    <div>9 Open questions</div>
+    <div>A Appendix: routine index</div>
+    <div>B Appendix: LCD mapping</div>
+    <div>C Appendix: instruction set</div>
+  </div>
+
+  <h2>1 Scope, sources and method</h2>
+  <p>This document describes the Elfin Twins GM-021 handheld virtual pet at three levels: the hardware as seen by
+    its program, the firmware's structure, and the game rules it implements. It also documents the Game Boy
+    Advance port built on top of that knowledge. No original documentation was available. Everything was derived from
+    the 32 KB ROM dump distributed with BrickEmuPy, whose Python emulator core (<code>cores/SPLB20.py</code>) and
+    device description (<code>assets/ElfinTwins.brick</code>, <code>.svg</code>) were the starting point.</p>
+  <p>The method combined four tools, all in the repository:</p>
+  <ul>
+    <li><b>A C port of the core</b>, checked instruction by instruction against the Python core, used for fast
+      experiments (hours of pet time per second).</li>
+    <li><b>An analysis disassembler</b> (<code>gba/tools/elfin_disasm.py</code>) that follows the ROM's
+      <code>pha/pha/rts</code> jump tables and annotates the code with the symbols of
+      <code>elfin_symbols.py</code>. 15430 bytes of code reachable from the vectors and jump tables (47.1% of the ROM), 172 subroutines, 8 jump tables; the rest is graphics, animation scripts, melodies and lookup tables.</li>
+    <li><b>A scripted workbench</b> (<code>gba/host/elfin_sim.py</code>, <code>explore.py</code>) to press buttons,
+      poke RAM, record LCD frames and trace calls of chosen routines (for example the stat routines) with the game mode in
+      effect.</li>
+    <li><b>A two-unit link simulator</b> (<code>gba/host/link_sim.py</code>) that wires two emulated toys together.</li>
+  </ul>
+  <p>Each statement about the game is tagged with how it is known:
+    <span class="conf c-code">code</span> read in the disassembly,
+    <span class="conf c-obs">observed</span> in instrumented emulation,
+    <span class="conf c-inf">inferred</span> from indirect evidence (for example a name guessed from an effect or a picture).</p>
+</section>
+
+<!-- ============================================================ HARDWARE -->
+<section>
+  <h2>2 Hardware</h2>
+  <h3>2.1 Microcontroller and memory map</h3>
+  <p>The toy is built around a Sunplus <b>SPLB20</b>, a 4-bit-era LCD controller with a reduced 6502 CPU
+    (70 opcodes, no Y-indexed modes, no stack page: the stack lives in zero page). BrickEmuPy runs it at
+    <b>560 kHz</b> from its RC oscillator with a 32 768 Hz sub-clock for timekeeping. The 64 KB address space is
+    laid out as follows <span class="conf c-code">code</span>:</p>
+  <table>
+    <tr><th>Range</th><th>Contents</th></tr>
+    <tr><td><code>$0000–$003F</code></td><td>LCD RAM, 64 bytes (512 segment bits, 480 used)</td></tr>
+    <tr><td><code>$0040–$007F</code></td><td>special function registers (only <code>$70–$7F</code> implemented)</td></tr>
+    <tr><td><code>$0080–$00FF</code></td><td>CPU RAM, 128 bytes: game state and the stack (<code>SP</code> starts at <code>$FF</code>)</td></tr>
+    <tr><td><code>$0200–$09FF</code></td><td>data RAM, 2 KB, mirrored (e.g. at <code>$1000</code>). The game uses <code>$1080–$10AF</code> for the name, password and quiz data.</td></tr>
+    <tr><td><code>$8000–$FFFF</code></td><td>ROM, 32 KB. Vectors: NMI <code>$8C01</code>, RESET <code>$970C</code>, IRQ <code>$8C00</code> (a bare <code>rti</code>).
+      <code>$8000–$83D4</code> is Sunplus's factory test program, entered through test vectors at <code>$FFF2–$FFF7</code> (§8.2).
+      <code>$FF27</code> holds the developer credit (§8.1).</td></tr>
+  </table>
+
+  <h3>2.2 Special function registers</h3>
+  <table class=""><thead><tr><th>Addr</th><th>Name</th><th>Function</th></tr></thead><tbody><tr><td>$70</td><td><code>LCD_CFG</code></td><td>LCD configuration</td></tr><tr><td>$71</td><td><code>PA_DIR</code></td><td>port A direction: 1 = input, 0 = output</td></tr><tr><td>$72</td><td><code>PA_CFG</code></td><td>port A output config; bits 6-7 = buzzer</td></tr><tr><td>$73</td><td><code>PA_DATA</code></td><td>port A: b0 ESC b1 LEFT b2 RIGHT b3 CLOCK b4 ENTER (0 = pressed), b5 LINK</td></tr><tr><td>$74</td><td><code>PXY_DATA</code></td><td>port X/Y (unused)</td></tr><tr><td>$75</td><td><code>PZ_DATA</code></td><td>port Z (unused)</td></tr><tr><td>$76</td><td><code>LCD_BIAS</code></td><td>LCD bias / contrast</td></tr><tr><td>$77</td><td><code>KEYSCAN_L</code></td><td>key scan output (unused)</td></tr><tr><td>$78</td><td><code>KEYSCAN_H</code></td><td>key scan output (unused)</td></tr><tr><td>$79</td><td><code>INT_CFG</code></td><td>interrupt enable (write) / pending flags (read, clears)</td></tr><tr><td>$7A</td><td><code>SYS_CTRL</code></td><td>system control: b7 stop osc, b5 32k, b4 timer, b3 LCD on, b2 LCD en</td></tr><tr><td>$7B</td><td><code>TC_PRESET</code></td><td>down-counter preset = buzzer pitch</td></tr><tr><td>$7C</td><td><code>PRESCALER</code></td><td>timer prescaler (1 &lt;&lt; n)</td></tr><tr><td>$7E</td><td><code>KEYSCAN_CTRL</code></td><td>key scan control</td></tr><tr><td>$7F</td><td><code>WDT_CLR</code></td><td>watchdog clear</td></tr></tbody></table>
+  <p>Two register behaviours matter for emulation. Reading <code>INT_CFG</code> returns the pending flags and
+    clears them. The stop bits of <code>SYS_CTRL</code> act on a 0→1 transition: writing <code>$AD</code> while bit 7
+    is already set does not stop the oscillator. That is why the wake-up path always writes <code>$2C</code> first.</p>
+
+  <h3>2.3 Interrupts, sleep and wake-up</h3>
+  <p>All interrupts are delivered as <b>NMI</b>, gated by bit 7 of <code>INT_CFG</code>. Sources: 2 Hz tick (b0),
+    128 Hz tick (b1), power key PA0 (b2), any other port-A key (b3), down-counter underflow (b4). The IRQ vector is
+    unused. The firmware spends about 90% of the time <b>asleep</b>. At <code>$8E7A</code> it loads
+    <code>INT_CFG</code> from <code>int_sleep</code> (normally <code>$8D</code>: NMI, both keys, 2 Hz) and writes
+    <code>SYS_CTRL=$AD</code>, stopping the main oscillator while the 32 kHz clock and the LCD keep running.
+    An interrupt during STOP does not enter the NMI handler: the chip restarts at the <b>RESET</b> vector, and
+    <code>$970C</code> uses the pending flags (<code>$79 &amp; $8F</code>) to tell a wake-up from a cold start
+    <span class="conf c-code">code</span>.</p>
+  <div class="flow">
+    <div class="n"><b>RESET $970C</b>: <code>SYS_CTRL=$2C</code>, <code>SP=$FF</code>, <code>irq_flags = INT_CFG</code>. Any flag set → <b>wake $8EB2</b>. Otherwise cold start: clear RAM, hardware init, LCD test if a key is held, else <b>new_pair $9827</b>.</div>
+    <div class="arrow">↓</div>
+    <div class="n"><b>wake $8EB2</b>: key flag and PA5 low → link handling ($8EC2). 2 Hz flag → <b>tick_2hz</b>. Then rnd_next, key path (debounce → <b>key_decode $8FB8</b> → <b>key_dispatch</b> T_959D[mode]) or tick path (<b>tick_dispatch</b> T_957F[mode]).</div>
+    <div class="arrow">↓</div>
+    <div class="n"><b>sleep_main $8E74</b>: update ?! (<b>attention $8E26</b>), wait for the melody (<b>wait_melody $C626</b>), <code>INT_CFG=int_sleep</code>, <code>SYS_CTRL=$AD</code> → STOP until the next interrupt.</div>
+  </div>
+
+  <h3>2.4 Timers and buzzer</h3>
+  <p>The 2 Hz and 128 Hz ticks are derived from the 32 kHz clock (280 000 and 4 375 CPU cycles at 560 kHz).
+    The 8-bit down counter is clocked at <code>clk / 2<sup>PRESCALER</sup></code> and reloads from
+    <code>TC_PRESET</code>. It also drives the buzzer, which sounds when <code>PA_CFG</code> bits 6–7 are set and
+    the timer is enabled:</p>
+  <pre>f_buzzer = 560000 / 2^PRESCALER / (TC_PRESET + 1)</pre>
+  <p>Melodies are note lists (duration, preset) walked by the NMI handler on the 128 Hz tick through
+    <code>snd_len</code>/<code>snd_ptr</code>. <code>snd_play</code> starts melody X from a pointer table at
+    <code>$F7D5/$F7EB</code> <span class="conf c-code">code</span>.</p>
+
+  <h3>2.5 Port A: buttons, link line, buzzer</h3>
+  <table>
+    <tr><th>Bit</th><th>Use</th><th>Notes</th></tr>
+    <tr><td>0</td><td>ESC</td><td>the "power key" interrupt source</td></tr>
+    <tr><td>1</td><td>LEFT</td><td rowspan="4">active low, internal/external pull-ups (mask option 255)</td></tr>
+    <tr><td>2</td><td>RIGHT</td></tr>
+    <tr><td>3</td><td>CLOCK</td></tr>
+    <tr><td>4</td><td>ENTER</td></tr>
+    <tr><td>5</td><td>LINK</td><td>open-drain link wire; input normally, output-low to transmit</td></tr>
+    <tr><td>6–7</td><td>buzzer</td><td>via <code>PA_CFG</code></td></tr>
+  </table>
+  <p>The toy has seven buttons but only five contacts. <b>UP closes LEFT+RIGHT</b> and <b>DOWN closes
+    CLOCK+ENTER</b> (<code>PA&amp;$1F</code> = <code>$19</code> and <code>$07</code>) <span class="conf c-code">code</span>.
+    BrickEmuPy's <code>ElfinTwins.brick</code> originally wired DOWN to RIGHT+CLOCK (<code>$13</code>), which the
+    decoder ignores. The copy of <code>ElfinTwins.brick</code> in this repository uses the corrected mask 24.</p>
+
+  <h3>2.6 LCD</h3>
+  <p>480 of the 512 LCD RAM bits are used: a <b>29 × 16 dot matrix</b> (464 bits) and <b>16 icons</b> printed on the
+    panel. The bit order is irregular (Appendix B). The firmware draws with a bitmap blitter (<code>gfx_draw
+    $9061</code>) and addresses icons through a table of (byte, mask) pairs at <code>$9E26</code>
+    <span class="conf c-code">code</span>.</p>
+  <div class="cols2">
+    <figure><img src="../img/panel_labeled.png"><figcaption>The panel with all segments lit.</figcaption></figure>
+    <table class="compact"><thead><tr><th>Icon</th><th>LCD byte</th><th>Bit</th><th>Mask</th></tr></thead><tbody><tr><td><code>arrow_down</code></td><td>$2F</td><td>0</td><td>$01</td></tr><tr><td><code>arrow_left</code></td><td>$17</td><td>0</td><td>$01</td></tr><tr><td><code>arrow_right</code></td><td>$0C</td><td>6</td><td>$40</td></tr><tr><td><code>arrow_up</code></td><td>$04</td><td>6</td><td>$40</td></tr><tr><td><code>bag</code></td><td>$34</td><td>6</td><td>$40</td></tr><tr><td><code>building</code></td><td>$0F</td><td>0</td><td>$01</td></tr><tr><td><code>clean</code></td><td>$27</td><td>0</td><td>$01</td></tr><tr><td><code>exercise</code></td><td>$24</td><td>6</td><td>$40</td></tr><tr><td><code>food</code></td><td>$37</td><td>0</td><td>$01</td></tr><tr><td><code>game</code></td><td>$3F</td><td>0</td><td>$01</td></tr><tr><td><code>house</code></td><td>$07</td><td>0</td><td>$01</td></tr><tr><td><code>lamp</code></td><td>$2C</td><td>6</td><td>$40</td></tr><tr><td><code>link</code></td><td>$14</td><td>6</td><td>$40</td></tr><tr><td><code>meter</code></td><td>$1F</td><td>0</td><td>$01</td></tr><tr><td><code>picture</code></td><td>$3C</td><td>6</td><td>$40</td></tr><tr><td><code>question</code></td><td>$1C</td><td>6</td><td>$40</td></tr></tbody></table>
+  </div>
+
+  <h3>2.7 Instruction set</h3>
+  <p>The core implements 70 opcodes of the 6502 with standard encodings and 6502-like cycle counts; the other 186
+    opcodes are illegal. Decimal mode exists (<code>sed</code>) but the game does not rely on it. See Appendix C.</p>
+</section>
+
+<!-- ============================================================ FIRMWARE -->
+<section>
+  <h2>3 Firmware architecture</h2>
+  <h3>3.1 Control flow</h3>
+  <p>The program is event-driven around the sleep/wake cycle of §2.3. Nothing runs in a main loop. Every piece of work
+    starts from a wake-up: the 2 Hz tick, a key, or an edge on the link line. The NMI handler itself (<code>$8C01</code>)
+    only runs while the CPU is awake, for example during animations and delays. It performs the 2 Hz tick and steps
+    the melody engine on the 128 Hz tick. Long animations are therefore written as sequences of short steps, one
+    per wake-up, with their progress kept in RAM (<code>sub_sel</code>, <code>$C0</code>, <code>$C1</code> …)
+    <span class="conf c-code">code</span>.</p>
+
+  <h3>3.2 Timekeeping</h3>
+  <p><code>tick_2hz $8C6D</code> keeps two independent sets of counters <span class="conf c-code">code</span>:</p>
+  <table>
+    <tr><th>Counter</th><th>Range</th><th>On overflow</th></tr>
+    <tr><td>clock: <code>clk_halfsec</code> → <code>clk_min</code> → <code>clk_hour</code></td><td>120 / 60 / 24</td><td>—</td></tr>
+    <tr><td>life: <code>life_halfsec</code> → <code>life_min</code></td><td>120 / 10</td><td>every 10 minutes: <code>life_10min</code>++, <code>night_flag</code>, the <b>10-minute rules</b> (§5.2)</td></tr>
+    <tr><td><code>life_10min</code></td><td>144</td><td>every 24 h: <code>age_days</code>++, <code>growth_stage</code>, stats −1, lifespan check, <b>birthday</b></td></tr>
+  </table>
+  <p>The clock can be set and stopped by the player, while the life timer only counts. So a pair's birthday is 24 hours
+    after it arrived, whatever the clock says. On 118 of 120 ticks the routine only increments
+    <code>clk_halfsec</code> and <code>life_halfsec</code>, which is what makes fast catch-up possible (§7.6).</p>
+
+  <h3>3.3 Key decoder</h3>
+  <p><code>key_decode $8FB8</code> compares <code>PA&amp;$1F</code> with the value seen when the key went down
+    (<code>key_raw</code>) on each 128 Hz wake-up and counts in <code>key_hold</code>. Most keys are accepted after
+    4 identical samples (31 ms). ENTER, ESC and CLOCK also have a long form after 255 samples (2 s)
+    <span class="conf c-code">code</span>:</p>
+  <table class="compact">
+    <tr><th>PA&amp;$1F</th><th>Contacts</th><th>Code</th><th>Name</th><th>PA&amp;$1F</th><th>Contacts</th><th>Code</th><th>Name</th></tr>
+    <tr><td>$19</td><td>LEFT+RIGHT</td><td>1</td><td>UP</td><td>$0F</td><td>ENTER</td><td>5 / 7</td><td>ENTER / long</td></tr>
+    <tr><td>$07</td><td>CLOCK+ENTER</td><td>2</td><td>DOWN</td><td>$1E</td><td>ESC</td><td>6 / 9</td><td>ESC / long</td></tr>
+    <tr><td>$1D</td><td>LEFT</td><td>3</td><td>LEFT</td><td>$17</td><td>CLOCK</td><td>8 / B</td><td>CLOCK / long</td></tr>
+    <tr><td>$1B</td><td>RIGHT</td><td>4</td><td>RIGHT</td><td>$0E</td><td>ESC+ENTER</td><td>A</td><td>rescue / reset</td></tr>
+  </table>
+
+  <h3>3.4 Game modes and dispatch tables</h3>
+  <p><code>mode</code> (<code>$BD</code>) holds the current screen in its low nibble and a sub-state in its high
+    nibble. Two parallel 15-entry jump tables are indexed by the low nibble <span class="conf c-code">code</span>:</p>
+  <table class=""><thead><tr><th>Mode</th><th>Meaning</th><th>Tick handler (T_957F)</th><th>Key handler (T_959D)</th></tr></thead><tbody><tr><td>$0</td><td>Home (normal life)</td><td>$98E8 <code>home_tick</code></td><td>$9AF6 <code>home_key</code></td></tr><tr><td>$1</td><td>Food &amp; drink</td><td>$A007 <code>food_tick</code></td><td>$A07C <code>food_key</code></td></tr><tr><td>$2</td><td>Light</td><td>$A287 <code>lamp_tick</code></td><td>$A305 <code></code></td></tr><tr><td>$3</td><td>Games</td><td>$A386 <code>game_tick</code></td><td>$A40A <code>game_key</code></td></tr><tr><td>$4</td><td>Doctor / hospital</td><td>$AA8E <code>doctor_tick</code></td><td>$AAEA <code></code></td></tr><tr><td>$5</td><td>Clean</td><td>$AAED <code>clean_tick</code></td><td>$AB37 <code></code></td></tr><tr><td>$6</td><td>Status meter</td><td>$AB3A <code>meter_tick</code></td><td>$AB84 <code>meter_key</code></td></tr><tr><td>$7</td><td>Outings</td><td>$AFAD <code>outing_tick</code></td><td>$B0B9 <code>outing_key</code></td></tr><tr><td>$8</td><td>Asleep (lights off)</td><td>$BF12 <code>sleep_tick</code></td><td>$BF7F <code></code></td></tr><tr><td>$9</td><td>Birthday</td><td>$BFED <code>birthday_tick</code></td><td>$C012 <code></code></td></tr><tr><td>$A</td><td>Collapsed</td><td>$C015 <code>collapse_tick</code></td><td>$C09B <code>collapse_key</code></td></tr><tr><td>$B</td><td>Farewell (end of life)</td><td>$C103 <code>ending_tick</code></td><td>$C140 <code></code></td></tr><tr><td>$C</td><td>Opening story + SIGN NAME</td><td>$C2CB <code>intro_tick</code></td><td>$C1C4 <code></code></td></tr><tr><td>$D</td><td>Password</td><td>$95BB <code>password_tick</code></td><td>$9631 <code>password_key</code></td></tr><tr><td>$E</td><td>Link session</td><td>$B76C <code>link_tick</code></td><td>$B7ED <code>link_key</code></td></tr></tbody></table>
+  <p>Modes 1–5, 7 and E return home after 240 ticks (2 minutes) without a key (<code>idle_ticks</code>). Any mode can be
+    interrupted by the clock screen (<code>flags_b9</code> bit 7) and by the password prompt.</p>
+
+  <h3>3.5 Menu and icons</h3>
+  <p>The menu cursor <code>menu_sel</code> is a one-hot byte that LEFT/RIGHT rotate. ENTER converts it to a mode
+    through the table at <code>$9CC2</code> = <code>02 07 04 0E 06 05 03 01</code> (indexed by the bit position,
+    counted from the MSB): lamp→2, outing→7, doctor→4, link→E, meter→6, clean→5, game→3, food→1. ENTER only works while the cursor
+    icon is shown (<code>flags_b7</code> bit 2) and not during a "busy" animation (<code>flags_b9</code> bit 2).
+    The icon table at <code>$9E26</code> lists, in order: the 8 menu icons, ?!, the three locations and the four
+    arrows <span class="conf c-code">code</span>.</p>
+
+  <h3>3.6 Graphics, animation and sound engines</h3>
+  <p><code>gfx_draw</code> copies a bitmap from ROM (<code>gfx_ptr</code>) into LCD RAM at (<code>gfx_x</code>,
+    <code>gfx_y</code>). Scenes are started with <code>anim_start $C641</code> using an id in <code>anim_id</code>
+    (for example <code>$4C</code> birthday, <code>$4E</code> sleepy, <code>$80</code> mess, <code>$82</code> ill, <code>$52–$56</code> link games).
+    Idle life at home is a random choice of short scenes from per-location, per-stage tables at <code>$9AD3/$9AD9/$9ADF</code>.
+    About 55% of the ROM is data: bitmaps, scene scripts, melodies and lookup tables
+    <span class="conf c-code">code</span>.</p>
+</section>
+
+<!-- ============================================================ RAM -->
+<section>
+  <h2>4 Game state (RAM map)</h2>
+  <p>All game state lives in the 128 bytes of CPU RAM. The stack grows down from <code>$FF</code> and uses about 16 bytes.
+    Names are those of <code>elfin_symbols.py</code>. Flags are only listed where their meaning is established.</p>
+  <table class="compact"><thead><tr><th>Addr</th><th>Name</th><th>Meaning</th></tr></thead><tbody><tr><td>$80</td><td><code>lifespan</code></td><td>days the pair will stay: 23-26, chosen at birth (rnd &amp; 3) + 23</td></tr><tr><td>$81</td><td><code>rnd</code></td><td>random number, advanced by rnd_next</td></tr><tr><td>$82</td><td><code>clk_halfsec</code></td><td>clock: half-seconds 0-119</td></tr><tr><td>$83</td><td><code>clk_hour</code></td><td>clock: hour 0-23</td></tr><tr><td>$84</td><td><code>clk_min</code></td><td>clock: minute 0-59</td></tr><tr><td>$85</td><td><code>irq_flags</code></td><td>INT_CFG pending flags latched at wake-up</td></tr><tr><td>$86</td><td><code>irq_nmi</code></td><td>pending flags seen by the NMI handler</td></tr><tr><td>$87</td><td><code>int_sleep</code></td><td>INT_CFG value used while asleep ($8D normally, $8C = CLOCK STOP)</td></tr><tr><td>$88</td><td><code>life_10min</code></td><td>life timer: 10-minute blocks of the current day, 0-143</td></tr><tr><td>$89</td><td><code>life_min</code></td><td>life timer: minutes 0-9</td></tr><tr><td>$8A</td><td><code>life_halfsec</code></td><td>life timer: half-seconds 0-119</td></tr><tr><td>$8B</td><td><code>idle_ticks</code></td><td>2 Hz ticks without input in a sub-screen (240 = back home)</td></tr><tr><td>$8C</td><td><code>weight</code></td><td>weight in kg, 8-99</td></tr><tr><td>$8D</td><td><code>age_days</code></td><td>age in days (&#x27;YR&#x27; on the meter), starts at 1</td></tr><tr><td>$8E</td><td><code>st_mood</code></td><td>mood (flowers page) 0-33, shown x3</td></tr><tr><td>$8F</td><td><code>st_iq</code></td><td>IQ 0-33, shown x3</td></tr><tr><td>$90</td><td><code>st_stamina</code></td><td>stamina (sneaker page) 0-33, shown x3</td></tr><tr><td>$91</td><td><code>st_social</code></td><td>friendship (people page) 0-33, shown x3</td></tr><tr><td>$92</td><td><code>money</code></td><td>money in $100 units, 0-99 (0 = collapse)</td></tr><tr><td>$93</td><td><code>tummy</code></td><td>meals in the tummy 0-5 (0 = hungry)</td></tr><tr><td>$94</td><td><code>drinks</code></td><td>drinks 0-5 (0 = thirsty)</td></tr><tr><td>$95</td><td><code>sickness</code></td><td>sickness 0-10: &gt;=5 ill, &gt;=10 collapse</td></tr><tr><td>$96</td><td><code>dirt</code></td><td>dirt from digested meals: &gt;=2 needs a bath, &gt;=3 costs money</td></tr><tr><td>$97</td><td><code>care_clock</code></td><td>10-minute counter since wake-up driving hunger/thirst/digestion</td></tr><tr><td>$98</td><td><code>ill_clock</code></td><td>10-minute counter while ill (6 = one hour)</td></tr><tr><td>$9A</td><td><code>snd_len</code></td><td>melody: remaining duration of the current note</td></tr><tr><td>$9B</td><td><code>snd_ptr</code></td><td>melody: pointer to the note list (lo)</td></tr><tr><td>$9C</td><td><code>snd_ptr_hi</code></td><td>melody: pointer to the note list (hi)</td></tr><tr><td>$9D</td><td><code>key</code></td><td>decoded key: 1 UP 2 DOWN 3 LEFT 4 RIGHT 5 ENTER 6 ESC 7 ENTER-long 8 CLOCK 9 ESC-long A ESC+ENTER B CLOCK-long</td></tr><tr><td>$9E</td><td><code>key_raw</code></td><td>PA_DATA &amp; $1F when the key went down</td></tr><tr><td>$9F</td><td><code>key_hold</code></td><td>key debounce / hold counter (4 = pressed, 255 = long)</td></tr><tr><td>$A0</td><td><code>gfx_x</code></td><td>sprite draw: x position</td></tr><tr><td>$A1</td><td><code>gfx_y</code></td><td>sprite draw: y position</td></tr><tr><td>$A2</td><td><code>gfx_ptr</code></td><td>sprite draw: pointer to bitmap (lo)</td></tr><tr><td>$A3</td><td><code>gfx_ptr_hi</code></td><td>sprite draw: pointer to bitmap (hi)</td></tr><tr><td>$AE</td><td><code>tmp_count</code></td><td>temp; pulse count for link_send</td></tr><tr><td>$AF</td><td><code>tmp</code></td><td>temp (also the level written by link_send!)</td></tr><tr><td>$B4</td><td><code>link_edges</code></td><td>link: edges counted by link_recv; also temp</td></tr><tr><td>$B5</td><td><code>link_state</code></td><td>link session state (b7 = we are the caller)</td></tr><tr><td>$B6</td><td><code>idle_secs</code></td><td>seconds since the last key press (stops at $F0)</td></tr><tr><td>$B7</td><td><code>flags_b7</code></td><td>b1 ?! icon on, b2 menu cursor shown, b3 melody playing, b6 sound off, b7 ...</td></tr><tr><td>$B8</td><td><code>flags_b8</code></td><td>b0 locked (password), b1 TEST MODE, b2 night (22-07), b3 screen initialised, ...</td></tr><tr><td>$B9</td><td><code>flags_b9</code></td><td>b0 CLOCK STOP, b2 busy animation, b3 password set, b6 clock setting, b7 clock screen</td></tr><tr><td>$BA</td><td><code>sub_sel</code></td><td>sub-screen choice / animation step</td></tr><tr><td>$BB</td><td><code>life_bits</code></td><td>b0-1 growth stage, b2 choosing destination, b3 room messy, b4-5 destination, b6-7 location</td></tr><tr><td>$BC</td><td><code>menu_sel</code></td><td>menu cursor, one bit: 1 food 2 game 4 clean 8 meter 10 link 20 bag 40 outing 80 lamp</td></tr><tr><td>$BD</td><td><code>mode</code></td><td>game mode (low nibble) + sub-state (high nibble)</td></tr><tr><td>$C4</td><td><code>anim_id</code></td><td>animation / scene id for anim_start</td></tr><tr><td>$CA</td><td><code>sel2</code></td><td>secondary selection (food, location)</td></tr><tr><td>$CB</td><td><code>mode_saved</code></td><td>mode to return to after an interruption</td></tr><tr><td>$CC</td><td><code>collapse_10min</code></td><td>10-minute blocks since collapsing (144 = gone)</td></tr></tbody></table>
+</section>
+
+<!-- ============================================================ RULES -->
+<section>
+  <h2>5 Game rules</h2>
+  <h3>5.1 Statistics</h3>
+  <table>
+    <tr><th>Stat</th><th>RAM</th><th>Range</th><th>Shown as</th><th>Start</th></tr>
+    <tr><td>Mood (flowers)</td><td>$8E</td><td>0–33</td><td>×3 (0–99)</td><td rowspan="4">random 0–15 each <span class="conf c-code">code</span></td></tr>
+    <tr><td>IQ</td><td>$8F</td><td>0–33</td><td>×3</td></tr>
+    <tr><td>Stamina (sneaker)</td><td>$90</td><td>0–33</td><td>×3</td></tr>
+    <tr><td>Friendship (people)</td><td>$91</td><td>0–33</td><td>×3</td></tr>
+    <tr><td>Money</td><td>$92</td><td>0–99</td><td>×$100</td><td>rnd + 15 (≈ $2400)</td></tr>
+    <tr><td>Weight</td><td>$8C</td><td>8–99</td><td>kg</td><td>8</td></tr>
+    <tr><td>Age</td><td>$8D</td><td>1–</td><td>"YR" (days)</td><td>1</td></tr>
+    <tr><td>Tummy / drinks</td><td>$93 / $94</td><td>0–5</td><td>—</td><td>0</td></tr>
+    <tr><td>Sickness</td><td>$95</td><td>0–10</td><td>—</td><td>0</td></tr>
+    <tr><td>Dirt</td><td>$96</td><td>0–</td><td>—</td><td>0</td></tr>
+  </table>
+
+  <h3>5.2 Periodic rules</h3>
+  <p>Every 10 minutes of life (not in modes 8, A, B: asleep, collapsed, farewell) <span class="conf c-code">code</span>:</p>
+  <pre>if hour >= 20 and location != home:  go home
+care_clock += 1
+if care_clock % 4 == 3:                        # every 30 min
+    drinks -= 1; stamina -= 1; care_clock += 1
+    if care_clock & 4 == 0:                    # every 60 min
+        if tummy == 0: stamina -= 1; weight -= 1; sickness += 1
+        else:          tummy -= 1; dirt += 1
+                       if dirt >= 3: money -= 2; sickness += 1
+if care_clock == $60: room messy (life_bits b3)
+if sickness >= 5 and ++ill_clock == 6:         # every hour while ill
+    ill_clock = 0; sickness += 1
+    stamina, IQ, mood -= 1; money -= 2; weight -= 1
+if sickness >= 10 or money == 0:  collapse (mode A)</pre>
+  <p>Every 24 hours: <code>age_days</code>++, stage recomputed, mood, IQ, stamina and friendship −1. If
+    <code>age_days ≥ lifespan</code> the farewell starts (mode B), otherwise the birthday scene (mode 9) if the pair is at
+    home awake or asleep.</p>
+  <p><b>Attention (?!)</b> is recomputed on every return to sleep (<code>attention $8E26</code>). It is shown if
+    tummy = 0, drinks = 0, dirt ≥ 2, sickness ≥ 5, money &lt; 10, the night flag is set, the pair is just waking up
+    (mode <code>$88</code>) or the room is messy <span class="conf c-code">code</span>.</p>
+
+  <h3>5.3 Care actions</h3>
+  <h4>Food (mode 1)</h4>
+  <p>The item code is <code>base + 16·choice</code> with base <code>$10</code> at home or <code>$70</code> in town,
+    plus <code>$30</code> for teenagers and adults, and choice ∈ {0,1,2} shown in turn. The middle choice
+    (<code>$20 $50 $80 $B0</code>) is a drink: drinks+1, stamina+1, always accepted. <code>$50</code> (older, at
+    home) also gives IQ+1, mood−1 and money−1 <span class="conf c-code">code</span> (a coffee-like drink
+    <span class="conf c-inf">inferred</span>). The other codes are meals: tummy+1, stamina+1, some also weight+1,
+    refused when tummy ≥ 5. The pair refuses to eat at the running track.</p>
+  <h4>Outings (mode 7)</h4>
+  <p>Twelve activity codes, with effects applied by <code>outing_effect $B67D</code> <span class="conf c-code">code</span>.
+    Names are inferred from the pictures and effects:</p>
+  <table class="compact">
+    <tr><th>Code</th><th>Effect</th><th>Name</th><th>Code</th><th>Effect</th><th>Name</th></tr>
+    <tr><td>$10</td><td>social+1, money−1</td><td>TV <span class="conf c-obs">obs</span></td><td>$70</td><td>stamina+1, tummy−1</td><td>sport</td></tr>
+    <tr><td>$20</td><td>mood+1, money−1</td><td>music <span class="conf c-obs">obs</span></td><td>$80</td><td>stamina+1, drinks−1</td><td>sport</td></tr>
+    <tr><td>$30</td><td>IQ+1, social−1</td><td>reading <span class="conf c-obs">obs</span></td><td>$90</td><td>stamina+1, tummy−1</td><td>sport</td></tr>
+    <tr><td>$40</td><td>IQ+1, money+1</td><td>work</td><td>$A0</td><td>money+3, stamina−1</td><td>hard work</td></tr>
+    <tr><td>$50</td><td>social+1, money+1</td><td>work</td><td>$B0</td><td>money−4, mood+2, social+2</td><td>party</td></tr>
+    <tr><td>$60</td><td>mood+1, money+1</td><td>work</td><td>$C0</td><td>money−2, IQ+2</td><td>lessons</td></tr>
+  </table>
+  <p>Some sub-states include a small challenge checked against data RAM <code>$10A0</code>. A wrong answer costs
+    money−1 and shows the refusal animation <span class="conf c-code">code</span>.</p>
+  <h4>Other actions</h4>
+  <table>
+    <tr><th>Action</th><th>Condition</th><th>Effect</th></tr>
+    <tr><td>Clean (5)</td><td>dirt ≥ 2, or room messy</td><td>dirt = 0 / messy cleared; otherwise refusal <span class="conf c-code">code</span></td></tr>
+    <tr><td>Doctor (4)</td><td>sickness ≥ 5</td><td>sickness = 0; stamina, IQ, money, weight −1; if sickness ≥ 6 also mood and money −1 <span class="conf c-code">code</span></td></tr>
+    <tr><td>Light (2)</td><td>night flag (22:00–07:00)</td><td>asleep (mode 8), weight+1; by day: refusal <span class="conf c-code">code</span></td></tr>
+    <tr><td>Games (3)</td><td>—</td><td>two mini-games (shell game, reels); IQ and stamina up or down with the result <span class="conf c-obs">observed</span></td></tr>
+    <tr><td>Status meter (6)</td><td>—</td><td>8 pages: stage, age, weight, mood, IQ, stamina, friendship, money <span class="conf c-code">code</span></td></tr>
+  </table>
+  <figure><img src="../img/meter_values.png" style="width:150mm"><figcaption>Status meter values of a new pair (stat × 3, money × $100).</figcaption></figure>
+
+  <h3>5.4 Day, night and locations</h3>
+  <p><code>life_bits</code> b6–7 hold the location (0 home, 1 town, 2 running track) and b4–5 the destination while
+    choosing (UP). Babies cannot pick the track. From 18:00 the destination resets to home, and at 20:00 the pair
+    returns home <span class="conf c-code">code</span>. The night flag is set at 22:00 and cleared at 07:00. Between
+    23:00 and 07:00 a pair still up falls asleep by itself with weight−1. In mode 8, 07:00–08:00 is the alarm
+    (mode <code>$88</code>). At 08:00 the pair gets up with weight−1, tummy = drinks = 0 and <code>care_clock</code> = 0.</p>
+
+  <h3>5.5 Life cycle</h3>
+  <table>
+    <tr><th>Event</th><th>Rule</th></tr>
+    <tr><td>Arrival</td><td>clock 12:00, age 1, weight 8, lifespan = 23 + (rnd &amp; 3), stats random <span class="conf c-code">code</span></td></tr>
+    <tr><td>Stages</td><td>first index i with [3, 8, 15, 30][i] ≥ age: baby 1–3, child 4–8, teen 9–15, adult 16+ <span class="conf c-code">code</span></td></tr>
+    <tr><td>Collapse (A)</td><td>sickness ≥ 10 or money = 0. ESC+ENTER within 144 ten-minute blocks (24 h): money = 20, sickness = 0, the four stats −7, hospital (mode 4). After 24 h: mode <code>$4A</code>, and ESC+ENTER wipes RAM <code>$85–$FF</code> (new pair, clock kept) <span class="conf c-code">code</span></td></tr>
+    <tr><td>Farewell (B)</td><td>age ≥ lifespan: portrait, ESC+ENTER → new pair <span class="conf c-code">code</span></td></tr>
+  </table>
+  <figure><img src="../img/stages.png" style="width:160mm"><figcaption>Home scenes for the four stages.</figcaption></figure>
+
+  <h3>5.6 Password, clock stop, test mode</h3>
+  <p><b>Clock.</b> CLOCK shows the clock (<code>flags_b9</code> b7). LEFT/RIGHT toggle the sound (<code>flags_b7</code> b6,
+    bell icon). A long CLOCK sets <code>int_sleep=$8C</code> (no 2 Hz interrupt): "CLOCK STOP", time and pet frozen.
+    ESC then enters setting (LEFT hour+1, RIGHT minute+1). ENTER restarts at 0 s and opens the password screen
+    <span class="conf c-code">code</span>.</p>
+  <p><b>Password.</b> Two digits stored at <code>$1090/$1091</code>. 00 = none, otherwise <code>flags_b9</code> b3. With a
+    password set, 240 s without a key sets <code>flags_b8</code> b0, and the next key opens the prompt (mode D). Three wrong
+    entries are counted in <code>link_edges</code> (reused) <span class="conf c-code">code</span>.</p>
+  <p><b>Name and test mode.</b> The intro ends with SIGN NAME (mode <code>$8C</code>): 10 characters, 0 = space and
+    1–26 = A–Z, stored at <code>$1080</code>. ENTER compares them with <code>$C24F</code> =
+    <code>13 03 04 00 00 14 05 13 14 00</code>, which is "SCD␣␣TEST␣". A match sets <code>flags_b8</code> b1 (test
+    mode). On the home screen ENTER then adds a day, ESC adds 10 minutes and a long ESC cycles the stage
+    <span class="conf c-code">code</span> <span class="conf c-obs">observed</span>.</p>
+  <figure><img src="../img/sign_seq.png" style="width:120mm"><figcaption>SIGN NAME.</figcaption></figure>
+</section>
+
+<!-- ============================================================ LINK -->
+<section>
+  <h2>6 Link protocol</h2>
+  <h3>Physical layer</h3>
+  <p>One wire on PA5, idle high through pull-ups. A unit transmits by making PA5 an output (<code>PA_DIR=$1F</code>)
+    and writing levels, and returns to input (<code>$3F</code>) to receive. A falling edge wakes a sleeping unit
+    through the key interrupt <span class="conf c-code">code</span>.</p>
+  <h3>Messages: pulse counts</h3>
+  <p><code>link_send $BE0A</code> drives the line low, waits ~183 ms, then writes <code>tmp_count</code> levels
+    toggling every ~1.26 ms (88 × 8 cycles), holds ~7.6 ms and releases. <code>link_recv $BE41</code> waits for the line
+    to leave its current level, then counts edges until it has been quiet for 10 × ~0.34 ms. The message is the edge count.
+    Because <code>delay_183ms</code> overwrites <code>tmp</code>, which is the level variable of the send loop, the first
+    write repeats the initial low and the last write is <b>low</b> <span class="conf c-code">code</span>
+    <span class="conf c-obs">observed</span>.</p>
+  <table class="compact">
+    <tr><th>Sent (tmp_count)</th><th>Edges seen</th><th>Meaning</th></tr>
+    <tr><td>11</td><td>10 (+ initial fall used as wake-up)</td><td>"hello" from the caller (<code>$B7A5</code>); accepted only if exactly 10 (<code>$8ED7</code>)</td></tr>
+    <tr><td>held low ~2.8 s</td><td>1 fall</td><td>answer: "I'm here" (state 4, <code>$BA91</code>)</td></tr>
+    <tr><td>8</td><td>—</td><td>caller ready / game over, back to the menu</td></tr>
+    <tr><td>choice + 2</td><td>2 / 3 / 4</td><td>game chosen: tug-of-war, rock-paper-scissors, arm wrestling</td></tr>
+    <tr><td>5</td><td>—</td><td>round finished (IQ, stamina, friendship +1)</td></tr>
+    <tr><td>15</td><td>—</td><td>cancel (ESC)</td></tr>
+  </table>
+  <h3>Session state machine (link_state, $B5)</h3>
+  <pre class="seq">caller                                   answerer
+------                                   --------
+menu Link + ENTER: B5=$80, send 11  ───► wake on fall, link_recv = 10 edges
+                                         B5=4: hold line low (answer), release, B5=5
+wake on fall with PA5 low: B5=1     ◄─── (the answer)
+B5=1: send 8, B5=2: game menu
+ENTER: send choice+2                ───► B5=5: receive, start the same game
+both: game $6E/$5E/$2E …, scores, send 5 / 8, back to the menu
+ESC on either side: send 15, both go home.
+timeouts: caller gives up after 6 ticks without an edge (L_B735)</pre>
+  <div class="box warn"><b>The latched-edge observation.</b> The answerer's quiet detection (≈3.4 ms) ends before the caller
+    releases the line (≈7.6 ms hold), so the answer pulse starts while the line is already low. The caller never sees a
+    new falling edge on its pin. With the emulator's edge-triggered key interrupt the handshake fails in <b>every</b> case
+    (27/27 timing combinations). It succeeds in every case if a falling edge of the wire is <b>latched</b> and delivered
+    once the key interrupt is enabled again, which is common MCU behaviour. The real toys evidently connect, so we believe
+    the SPLB20 latches port-change events. The GBA link bridge implements that model (§7.5)
+    <span class="conf c-obs">observed</span> <span class="conf c-inf">inferred</span>.</div>
+  <figure><img src="../img/link_game_a.png" style="width:150mm"><figcaption>Tug-of-war on the caller, recorded from two emulated units connected by the simulated wire.</figcaption></figure>
+</section>
+
+<!-- ============================================================ GBA -->
+<section>
+  <h2>7 Game Boy Advance port</h2>
+  <h3>7.1 Overview</h3>
+  <p>The port runs the original ROM on a C re-implementation of the SPLB20 and adds a GBA front end. There is no
+    high-level emulation of game logic in normal play, so behaviour is the toy's own.</p>
+  <table>
+    <tr><th>Part</th><th>File</th><th>Runs</th></tr>
+    <tr><td>SPLB20 core</td><td><code>gba/core/splb20.c</code></td><td>ARM, IWRAM</td></tr>
+    <tr><td>Emulation driver: pacing, buttons, sound, link</td><td><code>gba/elfin/source/emu.c</code></td><td>ARM, IWRAM, 2048 Hz timer IRQ</td></tr>
+    <tr><td>LCD renderer</td><td><code>gba/elfin/source/lcd.c</code></td><td>ARM, IWRAM, main loop</td></tr>
+    <tr><td>Link bridge</td><td><code>gba/core/elfin_link.c</code></td><td>from the IRQ</td></tr>
+    <tr><td>RTC catch-up</td><td><code>gba/core/elfin_catchup.c</code></td><td>at start-up</td></tr>
+    <tr><td>RTC driver (S-3511A)</td><td><code>gba/common/rtc.c</code></td><td>—</td></tr>
+    <tr><td>Front end: menu, saving</td><td><code>gba/elfin/source/main.c</code>, <code>save.c</code></td><td>Thumb, ROM</td></tr>
+    <tr><td>Assets (generated)</td><td><code>gba/elfin/source/assets.c</code></td><td>ROM data</td></tr>
+  </table>
+  <p>Memory: ROM image 416 KB; IWRAM 26.1 KB of 32 KB (core 21.4 KB of code, state and tables 4.7 KB, 4 KB kept for the
+    stacks); EWRAM 84 KB (game ROM copy 32 KB, renderer tables, save buffer).</p>
+
+  <h3>7.2 Core port and verification</h3>
+  <p><code>splb20.c</code> is a line-by-line port of <code>cores/SPLB20.py</code>, including its quirks: the
+    0→1 rule of the stop bits, flag computation order in ADC/SBC, and key interrupts only on falling input changes.
+    Cycle counts are kept in 24.8 fixed point so the fractional sub-clock divider
+    (560000/32768 = 17 + 23/256) is exact. Verification:</p>
+  <table>
+    <tr><th>Test</th><th>What it checks</th><th>Result</th></tr>
+    <tr><td><code>verify_core.py</code></td><td>C and Python cores in lock-step: registers after every instruction, all RAM every 5000, random buttons</td><td>18 M instructions (3 × 6 M) identical, no illegal opcodes</td></tr>
+    <tr><td><code>test_sleep_skip.py</code></td><td>sleep fast path vs stepping</td><td>identical over 536 s</td></tr>
+    <tr><td><code>test_run_equiv.py</code></td><td><code>splb20_run</code> (all fast paths) vs <code>splb20_step</code>, whole-state compare</td><td>identical over 1800 s with random buttons</td></tr>
+    <tr><td><code>test_catchup.py</code></td><td>RTC catch-up vs full emulation</td><td>clock, life timer, age, lifespan and mode equal for 6, 24, 30, 48 and 100 h</td></tr>
+    <tr><td><code>test_link.py</code></td><td>call → answer → game over a simulated wire</td><td>27/27 with the bridge (slices 100/273/546 cycles, ±3% skew)</td></tr>
+  </table>
+
+  <h3>7.3 Performance</h3>
+  <p>A naive interpreter needed about 230 GBA cycles per emulated instruction, and ran the busy intro at 45% speed.
+    Four techniques bring the busiest scenes to full speed, all exact (verified by <code>test_run_equiv.py</code>):</p>
+  <ul>
+    <li><b>Sleep skipping.</b> While the oscillator is stopped, jump straight to the step on which the next timer event
+      is due.</li>
+    <li><b>Batched timers.</b> Apply elapsed cycles to the timers once per run of instructions that ends at the next due event.
+      Writes to <code>$7A</code>/<code>$7C</code> flush the batch first. No event can be pending inside a batch, so the
+      NMI still lands on the same instruction.</li>
+    <li><b>Idle-loop skipping.</b> The ROM is scanned at start-up for the delay loop <code>85 7F CA D0 FB</code> and the
+      wait loop <code>A5 aa C5 bb F0 FA</code> (aa, bb in RAM). Whole iterations up to the next timer event are skipped
+      and their final register state is set directly.</li>
+    <li><b>Placement.</b> ARM code in IWRAM, the game ROM copied to EWRAM, <code>execute()</code> inlined into the run loop.</li>
+  </ul>
+  <table>
+    <tr><th>Scene</th><th>Emulated instr/s</th><th>Speed</th></tr>
+    <tr><td>Normal life (home)</td><td>12–23 k</td><td>100.0%</td></tr>
+    <tr><td>Opening story, busiest part</td><td>131 k</td><td>96.6%</td></tr>
+    <tr><td>Opening story, average</td><td>110 k</td><td>100%</td></tr>
+  </table>
+  <p>Pacing uses real time. Timer 3 runs freely at 262 144 Hz, and each 2048 Hz interrupt runs the cycles owed for the
+    time that has actually passed (560000/262144 = 4375/2048 cycles per tick, accumulated exactly), capped at 1/8 s. A late
+    or merged interrupt is therefore made up rather than lost.</p>
+
+  <h3>7.4 Display, input, sound</h3>
+  <p><code>make_assets.py</code> renders the SVG panel at 6/11 px per SVG unit, so the 11-unit dot pitch becomes
+    6 px, with the dots pixel-aligned as 5 × 5 squares. Every screen pixel touched by a segment or its drop shadow gets a
+    list of contributors (segment, alpha, shadow flag): 19 325 pixels, 28 626 contributions. Segments switch instantly by default.
+    The optional <i>LCD fade</i> (START menu) instead moves each segment's brightness 40% towards its target every frame
+    (BrickEmuPy's motion blur of 0.6). It is cosmetic: the ROM never toggles a segment faster than about 20 Hz (51 ms in the
+    opening story, ~1 s in normal play, measured), so it uses no flicker grey levels. Only the pixels of segments whose
+    16-level brightness changed are recomposed in mode 3. Buttons: A=ENTER, B=ESC, SELECT/L/R=CLOCK, D-pad. UP and DOWN
+    close the same contact pairs as on the toy. The buzzer is mapped to DMG square channel 1.
+    The toy plays <code>clock / period</code> Hz with <code>period = clock_div × (TC_PRESET + 1)</code>, and the channel plays
+    <code>131072 / (2048 − rate)</code> Hz, so the port uses <code>rate = 2048 − round(131072 · period / clock)</code>.
+    An earlier build truncated twice and made every note sharp by a different amount (up to +27 cents), which sounded out of tune.</p>
+  <p>The tunes recorded in the opening story, menus and actions use eight notes <span class="conf c-obs">observed</span>, all periods that are multiples of 32 cycles: 875 Hz × 20/<i>n</i> for
+    <i>n</i> = 20, 16, 13, 12, 11, 10, 9, 8 (875, 1094, 1346, 1458, 1591, 1750, 1944, 2188 Hz). These are whole-number
+    ratios, not equal temperament, so next to a piano some notes sit up to 36 cents off (E6 +36, B6 −28). That is how the
+    toy itself sounds. On the GBA every one of these notes is within 11 cents of the toy's pitch, the channel's step size
+    at these frequencies. Absolute pitch also depends on the 560 kHz clock estimate <span class="conf c-inf">inferred</span>.</p>
+  <figure><img src="../img/gba_home.png" style="width:90mm"><figcaption>The port in mGBA.</figcaption></figure>
+
+  <h3>7.5 Link bridge</h3>
+  <p>The GBA link port is used in general-purpose mode (<code>RCNT = $8000 | dir&lt;&lt;4 | data</code>). The toy's
+    wire is mapped to <b>SD</b>, which the GBA link cable connects to every console (SO/SI are daisy-chained).
+    <b>SC</b> can be selected instead. The pin is only ever driven low or released, so two consoles never fight.
+    Once per 2048 Hz slice <code>elfin_link_before()</code> feeds the wire to PA5 and <code>elfin_link_after()</code>
+    drives the wire when PA5 is output-low. A falling wire edge is latched and delivered with
+    <code>splb20_key_irq()</code> when the key interrupt is enabled (§6). A wire never seen high, or low for more than
+    10 s, is ignored. That protects against missing pull-ups and unconnected cables.</p>
+
+  <h3>7.6 RTC catch-up</h3>
+  <p>At start-up the port reads the cartridge RTC (Seiko S-3511A protocol on cartridge GPIO <code>$80000C4–C8</code>; the
+    ROM contains the <code>SIIRTC_V</code> signature that emulators and some loaders look for). It then lets the pet live
+    through the time it was off <span class="conf c-code">code</span>:</p>
+  <ul>
+    <li>In the steady modes (home awake, 0; collapsed, A) with the CPU asleep at <code>$8E83</code>, a tick that only increments
+      the two half-second counters is applied directly in C.</li>
+    <li>Other minute boundaries run <code>tick_2hz</code> as a subroutine with a sentinel return address. A
+      <code>txs</code> means it escaped into the main program.</li>
+    <li>10-minute and hour boundaries let the game handle the tick completely: the 2 Hz timer fires and the game runs until
+      it is asleep again. That is where bedtime, waking and the other main-program transitions happen.</li>
+    <li>Any other mode (animations, birthday, farewell) is emulated normally, with sleep skipping, until steady again.</li>
+  </ul>
+  <p>Validation against full emulation is in §7.2. Cost: about 15–100 k instructions per hour away (100 h ≈ 1.5 M), and
+    13 h 49 min took about 2 s on the GBA. After catching up, the pet clock can be set from the RTC. The player can
+    also cap the time away at one day or pause the pet while off.</p>
+
+  <h3>7.7 Saving</h3>
+  <p>Battery SRAM (tagged <code>SRAM_V113</code>) holds two 8 KB slots, written alternately. Each slot has a header
+    (magic <code>ELF1</code>, version, state size, sequence number, RTC seconds since 2000, settings, FNV-1a checksum)
+    and the raw <code>splb20_t</code>. The header's first word is written last, so a torn write leaves the other slot as the
+    newest valid one. The machine state is copied with interrupts masked and written outside the critical section. Saves
+    happen 3 s after the last key, every minute, and on opening the menu.</p>
+
+  <h3>7.8 Build and test tooling</h3>
+  <p><code>gba/tools/gba.mk</code> builds with devkitARM (<code>DEVKITARM</code> set: <code>gba.specs</code>,
+    <code>gbafix</code>) or with any <code>arm-none-eabi-gcc</code> + newlib, using the repository's
+    <code>crt0.s</code>, <code>gba.ld</code> and <code>gbafix.py</code>. libtonc is vendored and always built from
+    source. Host tools: <code>mgba_run</code> (headless libmgba runner with a fake RTC, key scripts, screenshots and memory
+    dumps), the verification scripts of §7.2, the workbench, the link simulator, the analysis disassembler and the figure
+    generator used for this document and the manual.</p>
+</section>
+
+<!-- ============================================================ PROVENANCE -->
+<section>
+  <h2>8 Provenance: who made it</h2>
+  <p>The toy has no known packaging, manual or markings that name its maker. The ROM contains two pieces of evidence:
+    a credit left by the developer, and a test program supplied by the chip maker.</p>
+
+  <h3>8.1 The hidden credit</h3>
+  <p>The 58 bytes at <code>$FF27–$FF60</code>, just before the zero padding that runs up to the vector table, are
+    printable text with <code>$20</code> added to every character. That offset keeps the text out of a plain
+    <code>strings</code> dump. Subtracting <code>$20</code> gives <span class="conf c-code">code</span>:</p>
+  <pre>Sparkle Crystal Development Co.,Ltd. WangLaXian 1996.11.16</pre>
+  <figure><img src="../img/credit.png" style="width:100%"><figcaption>Stored bytes (top) and the same bytes minus $20 (bottom).</figcaption></figure>
+  <ul>
+    <li><b>Nothing reads it.</b> The only occurrences of the address <code>$FF27</code> in the ROM are three byte pairs inside
+      graphics data (<code>$D551</code>, <code>$EE04</code>, <code>$EE40</code>). No instruction points at it, so the toy
+      never displays it <span class="conf c-code">code</span>.</li>
+    <li><b>SCD.</b> The secret name that enables test mode (§5.6), <code>SCD  TEST</code>, matches the company's
+      initials <span class="conf c-inf">inferred</span>.</li>
+    <li><b>WangLaXian</b> reads as a Chinese personal name in pinyin (Wang La-xian), presumably the programmer
+      <span class="conf c-inf">inferred</span>.</li>
+    <li><b>1996.11.16</b> is probably the completion or build date. The original Tamagotchi went on sale in Japan on
+      23 November 1996 <span class="conf c-inf">inferred</span>.</li>
+  </ul>
+
+  <h3>8.2 Sunplus factory test program</h3>
+  <p>The first kilobyte of the ROM, <code>$8000–$83D4</code> (followed by <code>$FF</code> fill and a 2 KB zero block up to
+    <code>$8BFF</code>), is identical byte for byte in all five SPLB20 ROMs in BrickEmuPy's collection (Elfin Twins, Apollo 2 in 1,
+    Apollo Prince &amp; Princess, Big Cat 9 in 1, Gyaoppi 9 in 1). So it belongs to the chip, not to the game. The game never
+    jumps into it. It has its own vectors below the normal ones: test NMI <code>$FFF2</code>&nbsp;→&nbsp;<code>$83BE</code>, test RESET
+    <code>$FFF4</code>&nbsp;→&nbsp;<code>$8000</code>, test IRQ <code>$FFF6</code>&nbsp;→&nbsp;<code>$83CE</code>. This suggests that a test pin selects an alternate vector
+    set <span class="conf c-inf">inferred</span>. After reset it makes port A an input, reads a code applied by the tester,
+    and runs one of seven tests. Each was checked by starting the program at <code>$8000</code> on the emulated core with
+    the code applied <span class="conf c-obs">observed</span>:</p>
+  <table>
+    <tr><th>Code</th><th>Routine</th><th>Test</th><th>Emulated result</th></tr>
+    <tr><td><code>$F0</code></td><td><code>ft_standby</code></td><td>interrupts off, stop the oscillator (standby current)</td><td><code>SYS_CTRL=$83</code>, CPU halted</td></tr>
+    <tr><td><code>$FA</code></td><td><code>ft_lcd_all</code></td><td>all 512 LCD bits on, delay, then 32 kHz LCD-only mode</td><td>LCD RAM all <code>$FF</code>, <code>SYS_CTRL=$34</code></td></tr>
+    <tr><td><code>$F5</code></td><td><code>ft_rom_dump</code></td><td>port A as outputs; stream ROM <code>$8000–$FFFF</code> to it forever</td><td>port A = <code>78 A2 FF 9A A9…</code></td></tr>
+    <tr><td><code>$0A</code></td><td><code>ft_checksum</code></td><td>16-bit ROM sum as nibbles <code>$1x $2x $3x $4x</code>; checkerboard test of LCD + CPU RAM (<code>$F5</code> pass / <code>$05</code> fail) and data RAM <code>$1000–$17FF</code> (<code>$F8</code> / <code>$08</code>)</td><td><code>11 21 33 41 F5 F8</code> for sum <code>$F311</code></td></tr>
+    <tr><td><code>$0F</code></td><td><code>ft_ram_echo</code></td><td>the same RAM patterns, every byte read back sent to port A</td><td><code>AA 55 AA 55…</code></td></tr>
+    <tr><td><code>$AA</code></td><td><code>ft_lcd_buzzer</code></td><td>64-byte test picture into LCD RAM, buzzer pitch sweep</td><td>see figure</td></tr>
+    <tr><td><code>$AF</code></td><td><code>ft_misc</code></td><td>port/LCD configuration pulses, three buzzer tones, one of each instruction form, then wait for an interrupt</td><td><code>07 00 09</code> (no interrupt, see §9)</td></tr>
+  </table>
+  <p>The checksum output has a bug. The fourth nibble should be the high nibble of the sum's high byte (<code>$4F</code>),
+    but the code repeats the high nibble of the low byte (<code>$41</code>). A tester that compares against a precomputed
+    signature would not notice.</p>
+  <figure><img src="../img/factory_lcd.png" style="width:78%;margin:auto"><figcaption>Tests <code>$FA</code> and
+    <code>$AA</code> on the Elfin Twins panel. The test picture was drawn for another segment layout, but the top row still
+    reads SUNPLU…</figcaption></figure>
+
+  <h3>8.3 Other toys, and what is not known</h3>
+  <p>Every ROM in BrickEmuPy's <code>assets/</code> collection was searched for the credit text under every possible byte offset. Only Elfin Twins has one.
+    The only game data it shares with another dumped toy is its <b>font</b>: a pointer table at <code>$C50B</code>
+    (28 entries: A–Z, blank, full stop; letter code <i>n</i> → entry <i>n</i>−1) and 7-byte glyphs at <code>$C543</code>
+    (width 5, height 7, 35 pixel bits with the rows stored bottom-up). <i>Apollo Prince &amp; Princess</i> stores its font
+    in the same format at <code>$FF0B</code>. 16 of its 26 letters are identical to Elfin's and 10 are drawn differently.
+    The identical ones are the letters with only one natural 5×7 shape. That points to shared tools or conventions,
+    not proof of a shared developer <span class="conf c-inf">inferred</span>.</p>
+  <figure><img src="../img/font_compare.png" style="width:92%;margin:auto"><figcaption>The two fonts, decoded from the ROMs. Letters drawn differently are in orange.</figcaption></figure>
+  <p>Web searches (English and Chinese) found no trace of Sparkle Crystal Development Co., Ltd., of WangLaXian, or of other products.
+    Leads for further research: the packaging of a boxed GM-021 (distributor name), company registries (Hong Kong,
+    Taiwan), and collectors of 1997 virtual pets.</p>
+</section>
+
+<!-- ============================================================ OPEN -->
+<section>
+  <h2>9 Open questions</h2>
+  <ul>
+    <li><b>Latched key edges.</b> The link model of §6 should be confirmed on real hardware, for example by linking a real
+      toy to the GBA port, or by logging PA5 of two real toys.</li>
+    <li><b>SD pull-up on the GBA link cable in GPIO mode.</b> <code>elfin-linktest.gba</code> reports whether a
+      released SD idles high. If not, the port can use SC.</li>
+    <li><b>Names of some items.</b> Food items and outings are identified by effect. Their names are inferred from the pictures.</li>
+    <li><b>Mini-game scoring.</b> The exact rules of the two games in mode 3 and of the outing challenges were only
+      observed, not fully traced.</li>
+    <li><b>Some flag bits</b> in <code>flags_b7/b8/b9</code> and <code>sub_sel</code> are only partly understood. See the
+      annotated disassembly.</li>
+    <li><b>Who Sparkle Crystal Development was</b> (§8.3), and how the SPLB20 enters its test mode (a test pin is
+      assumed; the test-mode interrupt vectors are not emulated, so the interrupt part of test <code>$AF</code> was not checked).</li>
+    <li><b>Clock accuracy.</b> BrickEmuPy's 560 kHz is an estimate for the RC oscillator. The 2 Hz tick is derived from the
+      32 kHz crystal, so game time is exact either way.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ APPENDICES -->
+<section>
+  <h2>A Appendix: routine index</h2>
+  <table class="compact"><thead><tr><th>Addr</th><th>Name</th><th>What it does</th></tr></thead><tbody><tr><td>$8000</td><td><code>ft_reset</code></td><td>FACTORY TEST (Sunplus): entry from test vector $FFF4. Port A as inputs, then read the test code the tester applies:   $F0 standby   $FA LCD all on   $F5 ROM dump   $AF misc/instr/IRQ   $0A checksum + RAM test   $0F RAM pattern echo   $AA LCD pattern + buzzer Anything else: clear the watchdog and read again.</td></tr><tr><td>$804B</td><td><code>ft_standby</code></td><td>Test $F0: interrupts off, stop the oscillator (standby current)</td></tr><tr><td>$8063</td><td><code>ft_lcd_all</code></td><td>Test $FA: every LCD segment on, wait, then 32 kHz / LCD-only mode</td></tr><tr><td>$8094</td><td><code>ft_rom_dump</code></td><td>Test $F5: port A as outputs, stream ROM $8000-$FFFF to it forever</td></tr><tr><td>$80BB</td><td><code>ft_misc</code></td><td>Test $AF: port/LCD config pulses, three buzzer tones, execute one of each instruction form, then wait for an interrupt (result on port A: $09 = none, or the pending flags &lt;&lt; 4 | $09 from ft_nmi)</td></tr><tr><td>$8171</td><td><code>ft_checksum</code></td><td>Test $0A: 16-bit sum of all ROM bytes, sent as four nibbles $1x $2x $3x $4x; then checkerboard $AA/$55 over LCD RAM + CPU RAM (port A $F5 = pass, $05 = fail) and over data RAM $1000-$17FF ($F8 = pass, $08 = fail). Emulated: 11 21 33 41 F5 F8 for sum $F311 (the 4th nibble repeats the low byte&#x27;s high nibble instead of the high byte&#x27;s - a bug in Sunplus&#x27;s code).</td></tr><tr><td>$82A8</td><td><code>ft_ram_echo</code></td><td>Test $0F: same RAM patterns, every byte read back is output on port A</td></tr><tr><td>$8344</td><td><code>ft_lcd_buzzer</code></td><td>Test $AA: copy the 64-byte pattern ft_lcd_pattern to LCD RAM, sweep the buzzer</td></tr><tr><td>$83BE</td><td><code>ft_nmi</code></td><td>Test-mode NMI (vector $FFF2): pending flags &lt;&lt; 4 | $09 to port A, mark done</td></tr><tr><td>$83CE</td><td><code>ft_irq</code></td><td>Test-mode IRQ (vector $FFF6): return</td></tr><tr><td>$83CF</td><td><code>ft_delay</code></td><td>~0.5 ms delay loop</td></tr><tr><td>$8C00</td><td><code>irq</code></td><td>IRQ vector (unused: rti)</td></tr><tr><td>$8C01</td><td><code>nmi</code></td><td>NMI handler (interrupts while the CPU is running)</td></tr><tr><td>$8C6D</td><td><code>tick_2hz</code></td><td>2 Hz tick: clock, life timer, 10-minute and daily events</td></tr><tr><td>$8DE7</td><td><code>night_flag</code></td><td>Set/clear the night flag (22:00 / 07:00)</td></tr><tr><td>$8E09</td><td><code>growth_stage</code></td><td>Stage from age: &lt;=3 baby, &lt;=8 child, &lt;=15 teen, else adult</td></tr><tr><td>$8E26</td><td><code>attention</code></td><td>Decide whether the ?! icon is shown</td></tr><tr><td>$8E74</td><td><code>sleep_main</code></td><td>Common exit: update ?!, wait for the melody, then sleep</td></tr><tr><td>$8E7A</td><td><code>sleep</code></td><td>Stop the oscillator until the next interrupt (32 kHz keeps running)</td></tr><tr><td>$8E83</td><td><code>snd_play</code></td><td>Start melody X (also the instruction right after the STOP)</td></tr><tr><td>$8EB2</td><td><code>wake</code></td><td>Wake-up handler: link line, keys, tick, animation</td></tr><tr><td>$8FB8</td><td><code>key_decode</code></td><td>Debounce and decode the five contacts into a key code</td></tr><tr><td>$9061</td><td><code>gfx_draw</code></td><td>Draw a bitmap from ROM ($A2) at ($A0,$A1) into LCD RAM</td></tr><tr><td>$9338</td><td><code>rnd_next</code></td><td>Advance the random number generator</td></tr><tr><td>$93AD</td><td><code>key_dispatch</code></td><td>Per-key handler: jump table T_959D by mode</td></tr><tr><td>$9520</td><td><code>tick_dispatch</code></td><td>Per-tick handler: jump table T_957F by mode</td></tr><tr><td>$95BB</td><td><code>password_tick</code></td><td>Mode D (password) tick</td></tr><tr><td>$9631</td><td><code>password_key</code></td><td>Mode D keys</td></tr><tr><td>$970C</td><td><code>reset</code></td><td>Reset / wake-up vector. After STOP the chip restarts here; pending interrupt flags decide between cold start and wake-up.</td></tr><tr><td>$9827</td><td><code>new_pair</code></td><td>Cold start: clock 12:00, lifespan, stats, intro</td></tr><tr><td>$98E8</td><td><code>home_tick</code></td><td>Mode 0 (home) tick: alerts, idle animations, bedtime</td></tr><tr><td>$9AF6</td><td><code>home_key</code></td><td>Mode 0 (home) keys: menu, destination, test mode</td></tr><tr><td>$9CCA</td><td><code>test_add_10min</code></td><td>TEST MODE: ESC adds 10 minutes</td></tr><tr><td>$9CF1</td><td><code>test_stage</code></td><td>TEST MODE: long ESC cycles the growth stage</td></tr><tr><td>$9D51</td><td><code>cursor_off</code></td><td>Hide the menu cursor icon</td></tr><tr><td>$9D83</td><td><code>cursor_on</code></td><td>Show the menu cursor icon</td></tr><tr><td>$9DBA</td><td><code>attention_on</code></td><td>Light ?! (with beep)</td></tr><tr><td>$9DC8</td><td><code>attention_off</code></td><td>Clear ?!</td></tr><tr><td>$9E46</td><td><code>drinks_dec</code></td><td>drinks - 1</td></tr><tr><td>$9E4D</td><td><code>tummy_dec</code></td><td>tummy - 1</td></tr><tr><td>$9E54</td><td><code>stamina_dec</code></td><td>stamina - 1</td></tr><tr><td>$9E5B</td><td><code>iq_dec</code></td><td>IQ - 1</td></tr><tr><td>$9E62</td><td><code>mood_dec</code></td><td>mood - 1</td></tr><tr><td>$9E69</td><td><code>social_dec</code></td><td>friendship - 1</td></tr><tr><td>$9E70</td><td><code>money_dec</code></td><td>money - $100; at $0 the pair collapses</td></tr><tr><td>$9E7E</td><td><code>weight_dec</code></td><td>weight - 1 kg (not below 8)</td></tr><tr><td>$9E87</td><td><code>drinks_inc</code></td><td>drinks + 1 (max 5)</td></tr><tr><td>$9E90</td><td><code>tummy_inc</code></td><td>tummy + 1 (max 5)</td></tr><tr><td>$9E99</td><td><code>stamina_inc</code></td><td>stamina + 1 (max 33)</td></tr><tr><td>$9EA2</td><td><code>iq_inc</code></td><td>IQ + 1 (max 33)</td></tr><tr><td>$9EAB</td><td><code>mood_inc</code></td><td>mood + 1 (max 33)</td></tr><tr><td>$9EB4</td><td><code>social_inc</code></td><td>friendship + 1 (max 33)</td></tr><tr><td>$9EBD</td><td><code>money_inc</code></td><td>money + $100 (max $9900)</td></tr><tr><td>$9EC6</td><td><code>weight_inc</code></td><td>weight + 1 kg (max 99)</td></tr><tr><td>$A007</td><td><code>food_tick</code></td><td>Mode 1 (food) tick</td></tr><tr><td>$A07C</td><td><code>food_key</code></td><td>Mode 1 (food) keys</td></tr><tr><td>$A22B</td><td><code>food_effect</code></td><td>Apply the effect of the served food</td></tr><tr><td>$A287</td><td><code>lamp_tick</code></td><td>Mode 2 (light) tick</td></tr><tr><td>$A386</td><td><code>game_tick</code></td><td>Mode 3 (games) tick</td></tr><tr><td>$A40A</td><td><code>game_key</code></td><td>Mode 3 (games) keys</td></tr><tr><td>$AA8E</td><td><code>doctor_tick</code></td><td>Mode 4 (doctor) tick</td></tr><tr><td>$AAED</td><td><code>clean_tick</code></td><td>Mode 5 (clean) tick</td></tr><tr><td>$AB3A</td><td><code>meter_tick</code></td><td>Mode 6 (status meter) tick</td></tr><tr><td>$AB84</td><td><code>meter_key</code></td><td>Mode 6 keys</td></tr><tr><td>$AFAD</td><td><code>outing_tick</code></td><td>Mode 7 (outings) tick</td></tr><tr><td>$B0B9</td><td><code>outing_key</code></td><td>Mode 7 keys</td></tr><tr><td>$B67D</td><td><code>outing_effect</code></td><td>Apply the effect of outing code 1-12</td></tr><tr><td>$B76C</td><td><code>link_tick</code></td><td>Mode E (link) tick: session state machine</td></tr><tr><td>$B7ED</td><td><code>link_key</code></td><td>Mode E keys</td></tr><tr><td>$BE0A</td><td><code>link_send</code></td><td>Send tmp_count level changes on PA5 (link cable)</td></tr><tr><td>$BE41</td><td><code>link_recv</code></td><td>Count PA5 edges until the line is quiet</td></tr><tr><td>$BE8F</td><td><code>delay_8ms</code></td><td>6 x delay_1ms</td></tr><tr><td>$BEA1</td><td><code>delay_1ms</code></td><td>~1.26 ms delay (88 x 8 cycles)</td></tr><tr><td>$BEAD</td><td><code>delay_short</code></td><td>~0.3 ms delay (20 x 8 cycles)</td></tr><tr><td>$BF12</td><td><code>sleep_tick</code></td><td>Mode 8 (asleep) tick: alarm 07:00, up 08:00</td></tr><tr><td>$BFED</td><td><code>birthday_tick</code></td><td>Mode 9 (birthday) tick</td></tr><tr><td>$C015</td><td><code>collapse_tick</code></td><td>Mode A (collapsed) tick: 24 h to rescue</td></tr><tr><td>$C09B</td><td><code>collapse_key</code></td><td>Mode A keys: ESC+ENTER rescue / new pair</td></tr><tr><td>$C103</td><td><code>ending_tick</code></td><td>Mode B (farewell) tick</td></tr><tr><td>$C154</td><td><code>wipe_ram</code></td><td>Clear RAM $85-$FF and start a new pair</td></tr><tr><td>$C2CB</td><td><code>intro_tick</code></td><td>Mode C (opening story) tick</td></tr><tr><td>$C479</td><td><code>delay_183ms</code></td><td>delay_n with A=$32 (clobbers $AF)</td></tr><tr><td>$C47D</td><td><code>delay_n</code></td><td>delay $AF x 256 x 8 cycles</td></tr><tr><td>$C61B</td><td><code>wait_tick</code></td><td>Busy-wait until the next 2 Hz tick</td></tr><tr><td>$C626</td><td><code>wait_melody</code></td><td>Busy-wait until the melody has finished</td></tr><tr><td>$C637</td><td><code>lcd_fill</code></td><td>Fill LCD RAM with A</td></tr><tr><td>$C641</td><td><code>anim_start</code></td><td>Start animation / scene $C4</td></tr><tr><td>$C72A</td><td><code>clock_screen</code></td><td>Show the clock screen</td></tr></tbody></table>
+</section>
+
+<section>
+  <h2>B Appendix: LCD mapping</h2>
+  <p>Dot (x, y) of the 29 × 16 matrix → LCD RAM byte (hex) and bit (subscript).</p>
+  <table class="matrix"><thead><tr><th></th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th><th>10</th><th>11</th><th>12</th><th>13</th><th>14</th><th>15</th><th>16</th><th>17</th><th>18</th><th>19</th><th>20</th><th>21</th><th>22</th><th>23</th><th>24</th><th>25</th><th>26</th><th>27</th><th>28</th></tr></thead><tbody><tr><th>0</th><td>1F<sub>1</sub></td><td>1F<sub>2</sub></td><td>1F<sub>3</sub></td><td>1F<sub>4</sub></td><td>1F<sub>5</sub></td><td>1F<sub>6</sub></td><td>1F<sub>7</sub></td><td>1E<sub>0</sub></td><td>1E<sub>1</sub></td><td>1E<sub>2</sub></td><td>1E<sub>3</sub></td><td>1E<sub>4</sub></td><td>1E<sub>5</sub></td><td>1E<sub>6</sub></td><td>1E<sub>7</sub></td><td>1D<sub>0</sub></td><td>1D<sub>1</sub></td><td>1D<sub>2</sub></td><td>1D<sub>3</sub></td><td>1D<sub>4</sub></td><td>1D<sub>5</sub></td><td>1D<sub>6</sub></td><td>1D<sub>7</sub></td><td>1C<sub>0</sub></td><td>1C<sub>1</sub></td><td>1C<sub>2</sub></td><td>1C<sub>3</sub></td><td>1C<sub>4</sub></td><td>1C<sub>5</sub></td></tr><tr><th>1</th><td>17<sub>1</sub></td><td>17<sub>2</sub></td><td>17<sub>3</sub></td><td>17<sub>4</sub></td><td>17<sub>5</sub></td><td>17<sub>6</sub></td><td>17<sub>7</sub></td><td>16<sub>0</sub></td><td>16<sub>1</sub></td><td>16<sub>2</sub></td><td>16<sub>3</sub></td><td>16<sub>4</sub></td><td>16<sub>5</sub></td><td>16<sub>6</sub></td><td>16<sub>7</sub></td><td>15<sub>0</sub></td><td>15<sub>1</sub></td><td>15<sub>2</sub></td><td>15<sub>3</sub></td><td>15<sub>4</sub></td><td>15<sub>5</sub></td><td>15<sub>6</sub></td><td>15<sub>7</sub></td><td>14<sub>0</sub></td><td>14<sub>1</sub></td><td>14<sub>2</sub></td><td>14<sub>3</sub></td><td>14<sub>4</sub></td><td>14<sub>5</sub></td></tr><tr><th>2</th><td>0F<sub>1</sub></td><td>0F<sub>2</sub></td><td>0F<sub>3</sub></td><td>0F<sub>4</sub></td><td>0F<sub>5</sub></td><td>0F<sub>6</sub></td><td>0F<sub>7</sub></td><td>0E<sub>0</sub></td><td>0E<sub>1</sub></td><td>0E<sub>2</sub></td><td>0E<sub>3</sub></td><td>0E<sub>4</sub></td><td>0E<sub>5</sub></td><td>0E<sub>6</sub></td><td>0E<sub>7</sub></td><td>0D<sub>0</sub></td><td>0D<sub>1</sub></td><td>0D<sub>2</sub></td><td>0D<sub>3</sub></td><td>0D<sub>4</sub></td><td>0D<sub>5</sub></td><td>0D<sub>6</sub></td><td>0D<sub>7</sub></td><td>0C<sub>0</sub></td><td>0C<sub>1</sub></td><td>0C<sub>2</sub></td><td>0C<sub>3</sub></td><td>0C<sub>4</sub></td><td>0C<sub>5</sub></td></tr><tr><th>3</th><td>07<sub>1</sub></td><td>07<sub>2</sub></td><td>07<sub>3</sub></td><td>07<sub>4</sub></td><td>07<sub>5</sub></td><td>07<sub>6</sub></td><td>07<sub>7</sub></td><td>06<sub>0</sub></td><td>06<sub>1</sub></td><td>06<sub>2</sub></td><td>06<sub>3</sub></td><td>06<sub>4</sub></td><td>06<sub>5</sub></td><td>06<sub>6</sub></td><td>06<sub>7</sub></td><td>05<sub>0</sub></td><td>05<sub>1</sub></td><td>05<sub>2</sub></td><td>05<sub>3</sub></td><td>05<sub>4</sub></td><td>05<sub>5</sub></td><td>05<sub>6</sub></td><td>05<sub>7</sub></td><td>04<sub>0</sub></td><td>04<sub>1</sub></td><td>04<sub>2</sub></td><td>04<sub>3</sub></td><td>04<sub>4</sub></td><td>04<sub>5</sub></td></tr><tr><th>4</th><td>27<sub>1</sub></td><td>27<sub>2</sub></td><td>27<sub>3</sub></td><td>27<sub>4</sub></td><td>27<sub>5</sub></td><td>27<sub>6</sub></td><td>27<sub>7</sub></td><td>26<sub>0</sub></td><td>26<sub>1</sub></td><td>26<sub>2</sub></td><td>26<sub>3</sub></td><td>26<sub>4</sub></td><td>26<sub>5</sub></td><td>26<sub>6</sub></td><td>26<sub>7</sub></td><td>25<sub>0</sub></td><td>25<sub>1</sub></td><td>25<sub>2</sub></td><td>25<sub>3</sub></td><td>25<sub>4</sub></td><td>25<sub>5</sub></td><td>25<sub>6</sub></td><td>25<sub>7</sub></td><td>24<sub>0</sub></td><td>24<sub>1</sub></td><td>24<sub>2</sub></td><td>24<sub>3</sub></td><td>24<sub>4</sub></td><td>24<sub>5</sub></td></tr><tr><th>5</th><td>2F<sub>1</sub></td><td>2F<sub>2</sub></td><td>2F<sub>3</sub></td><td>2F<sub>4</sub></td><td>2F<sub>5</sub></td><td>2F<sub>6</sub></td><td>2F<sub>7</sub></td><td>2E<sub>0</sub></td><td>2E<sub>1</sub></td><td>2E<sub>2</sub></td><td>2E<sub>3</sub></td><td>2E<sub>4</sub></td><td>2E<sub>5</sub></td><td>2E<sub>6</sub></td><td>2E<sub>7</sub></td><td>2D<sub>0</sub></td><td>2D<sub>1</sub></td><td>2D<sub>2</sub></td><td>2D<sub>3</sub></td><td>2D<sub>4</sub></td><td>2D<sub>5</sub></td><td>2D<sub>6</sub></td><td>2D<sub>7</sub></td><td>2C<sub>0</sub></td><td>2C<sub>1</sub></td><td>2C<sub>2</sub></td><td>2C<sub>3</sub></td><td>2C<sub>4</sub></td><td>2C<sub>5</sub></td></tr><tr><th>6</th><td>37<sub>1</sub></td><td>37<sub>2</sub></td><td>37<sub>3</sub></td><td>37<sub>4</sub></td><td>37<sub>5</sub></td><td>37<sub>6</sub></td><td>37<sub>7</sub></td><td>36<sub>0</sub></td><td>36<sub>1</sub></td><td>36<sub>2</sub></td><td>36<sub>3</sub></td><td>36<sub>4</sub></td><td>36<sub>5</sub></td><td>36<sub>6</sub></td><td>36<sub>7</sub></td><td>35<sub>0</sub></td><td>35<sub>1</sub></td><td>35<sub>2</sub></td><td>35<sub>3</sub></td><td>35<sub>4</sub></td><td>35<sub>5</sub></td><td>35<sub>6</sub></td><td>35<sub>7</sub></td><td>34<sub>0</sub></td><td>34<sub>1</sub></td><td>34<sub>2</sub></td><td>34<sub>3</sub></td><td>34<sub>4</sub></td><td>34<sub>5</sub></td></tr><tr><th>7</th><td>3F<sub>1</sub></td><td>3F<sub>2</sub></td><td>3F<sub>3</sub></td><td>3F<sub>4</sub></td><td>3F<sub>5</sub></td><td>3F<sub>6</sub></td><td>3F<sub>7</sub></td><td>3E<sub>0</sub></td><td>3E<sub>1</sub></td><td>3E<sub>2</sub></td><td>3E<sub>3</sub></td><td>3E<sub>4</sub></td><td>3E<sub>5</sub></td><td>3E<sub>6</sub></td><td>3E<sub>7</sub></td><td>3D<sub>0</sub></td><td>3D<sub>1</sub></td><td>3D<sub>2</sub></td><td>3D<sub>3</sub></td><td>3D<sub>4</sub></td><td>3D<sub>5</sub></td><td>3D<sub>6</sub></td><td>3D<sub>7</sub></td><td>3C<sub>0</sub></td><td>3C<sub>1</sub></td><td>3C<sub>2</sub></td><td>3C<sub>3</sub></td><td>3C<sub>4</sub></td><td>3C<sub>5</sub></td></tr><tr><th>8</th><td>38<sub>3</sub></td><td>38<sub>2</sub></td><td>38<sub>1</sub></td><td>38<sub>0</sub></td><td>39<sub>7</sub></td><td>39<sub>6</sub></td><td>39<sub>5</sub></td><td>39<sub>4</sub></td><td>39<sub>3</sub></td><td>39<sub>2</sub></td><td>39<sub>1</sub></td><td>39<sub>0</sub></td><td>3A<sub>7</sub></td><td>3A<sub>6</sub></td><td>3A<sub>5</sub></td><td>3A<sub>4</sub></td><td>3A<sub>3</sub></td><td>3A<sub>2</sub></td><td>3A<sub>1</sub></td><td>3A<sub>0</sub></td><td>3B<sub>7</sub></td><td>3B<sub>6</sub></td><td>3B<sub>5</sub></td><td>3B<sub>4</sub></td><td>3B<sub>3</sub></td><td>3B<sub>2</sub></td><td>3B<sub>1</sub></td><td>3B<sub>0</sub></td><td>3C<sub>7</sub></td></tr><tr><th>9</th><td>30<sub>3</sub></td><td>30<sub>2</sub></td><td>30<sub>1</sub></td><td>30<sub>0</sub></td><td>31<sub>7</sub></td><td>31<sub>6</sub></td><td>31<sub>5</sub></td><td>31<sub>4</sub></td><td>31<sub>3</sub></td><td>31<sub>2</sub></td><td>31<sub>1</sub></td><td>31<sub>0</sub></td><td>32<sub>7</sub></td><td>32<sub>6</sub></td><td>32<sub>5</sub></td><td>32<sub>4</sub></td><td>32<sub>3</sub></td><td>32<sub>2</sub></td><td>32<sub>1</sub></td><td>32<sub>0</sub></td><td>33<sub>7</sub></td><td>33<sub>6</sub></td><td>33<sub>5</sub></td><td>33<sub>4</sub></td><td>33<sub>3</sub></td><td>33<sub>2</sub></td><td>33<sub>1</sub></td><td>33<sub>0</sub></td><td>34<sub>7</sub></td></tr><tr><th>10</th><td>28<sub>3</sub></td><td>28<sub>2</sub></td><td>28<sub>1</sub></td><td>28<sub>0</sub></td><td>29<sub>7</sub></td><td>29<sub>6</sub></td><td>29<sub>5</sub></td><td>29<sub>4</sub></td><td>29<sub>3</sub></td><td>29<sub>2</sub></td><td>29<sub>1</sub></td><td>29<sub>0</sub></td><td>2A<sub>7</sub></td><td>2A<sub>6</sub></td><td>2A<sub>5</sub></td><td>2A<sub>4</sub></td><td>2A<sub>3</sub></td><td>2A<sub>2</sub></td><td>2A<sub>1</sub></td><td>2A<sub>0</sub></td><td>2B<sub>7</sub></td><td>2B<sub>6</sub></td><td>2B<sub>5</sub></td><td>2B<sub>4</sub></td><td>2B<sub>3</sub></td><td>2B<sub>2</sub></td><td>2B<sub>1</sub></td><td>2B<sub>0</sub></td><td>2C<sub>7</sub></td></tr><tr><th>11</th><td>20<sub>3</sub></td><td>20<sub>2</sub></td><td>20<sub>1</sub></td><td>20<sub>0</sub></td><td>21<sub>7</sub></td><td>21<sub>6</sub></td><td>21<sub>5</sub></td><td>21<sub>4</sub></td><td>21<sub>3</sub></td><td>21<sub>2</sub></td><td>21<sub>1</sub></td><td>21<sub>0</sub></td><td>22<sub>7</sub></td><td>22<sub>6</sub></td><td>22<sub>5</sub></td><td>22<sub>4</sub></td><td>22<sub>3</sub></td><td>22<sub>2</sub></td><td>22<sub>1</sub></td><td>22<sub>0</sub></td><td>23<sub>7</sub></td><td>23<sub>6</sub></td><td>23<sub>5</sub></td><td>23<sub>4</sub></td><td>23<sub>3</sub></td><td>23<sub>2</sub></td><td>23<sub>1</sub></td><td>23<sub>0</sub></td><td>24<sub>7</sub></td></tr><tr><th>12</th><td>00<sub>3</sub></td><td>00<sub>2</sub></td><td>00<sub>1</sub></td><td>00<sub>0</sub></td><td>01<sub>7</sub></td><td>01<sub>6</sub></td><td>01<sub>5</sub></td><td>01<sub>4</sub></td><td>01<sub>3</sub></td><td>01<sub>2</sub></td><td>01<sub>1</sub></td><td>01<sub>0</sub></td><td>02<sub>7</sub></td><td>02<sub>6</sub></td><td>02<sub>5</sub></td><td>02<sub>4</sub></td><td>02<sub>3</sub></td><td>02<sub>2</sub></td><td>02<sub>1</sub></td><td>02<sub>0</sub></td><td>03<sub>7</sub></td><td>03<sub>6</sub></td><td>03<sub>5</sub></td><td>03<sub>4</sub></td><td>03<sub>3</sub></td><td>03<sub>2</sub></td><td>03<sub>1</sub></td><td>03<sub>0</sub></td><td>04<sub>7</sub></td></tr><tr><th>13</th><td>08<sub>3</sub></td><td>08<sub>2</sub></td><td>08<sub>1</sub></td><td>08<sub>0</sub></td><td>09<sub>7</sub></td><td>09<sub>6</sub></td><td>09<sub>5</sub></td><td>09<sub>4</sub></td><td>09<sub>3</sub></td><td>09<sub>2</sub></td><td>09<sub>1</sub></td><td>09<sub>0</sub></td><td>0A<sub>7</sub></td><td>0A<sub>6</sub></td><td>0A<sub>5</sub></td><td>0A<sub>4</sub></td><td>0A<sub>3</sub></td><td>0A<sub>2</sub></td><td>0A<sub>1</sub></td><td>0A<sub>0</sub></td><td>0B<sub>7</sub></td><td>0B<sub>6</sub></td><td>0B<sub>5</sub></td><td>0B<sub>4</sub></td><td>0B<sub>3</sub></td><td>0B<sub>2</sub></td><td>0B<sub>1</sub></td><td>0B<sub>0</sub></td><td>0C<sub>7</sub></td></tr><tr><th>14</th><td>10<sub>3</sub></td><td>10<sub>2</sub></td><td>10<sub>1</sub></td><td>10<sub>0</sub></td><td>11<sub>7</sub></td><td>11<sub>6</sub></td><td>11<sub>5</sub></td><td>11<sub>4</sub></td><td>11<sub>3</sub></td><td>11<sub>2</sub></td><td>11<sub>1</sub></td><td>11<sub>0</sub></td><td>12<sub>7</sub></td><td>12<sub>6</sub></td><td>12<sub>5</sub></td><td>12<sub>4</sub></td><td>12<sub>3</sub></td><td>12<sub>2</sub></td><td>12<sub>1</sub></td><td>12<sub>0</sub></td><td>13<sub>7</sub></td><td>13<sub>6</sub></td><td>13<sub>5</sub></td><td>13<sub>4</sub></td><td>13<sub>3</sub></td><td>13<sub>2</sub></td><td>13<sub>1</sub></td><td>13<sub>0</sub></td><td>14<sub>7</sub></td></tr><tr><th>15</th><td>18<sub>3</sub></td><td>18<sub>2</sub></td><td>18<sub>1</sub></td><td>18<sub>0</sub></td><td>19<sub>7</sub></td><td>19<sub>6</sub></td><td>19<sub>5</sub></td><td>19<sub>4</sub></td><td>19<sub>3</sub></td><td>19<sub>2</sub></td><td>19<sub>1</sub></td><td>19<sub>0</sub></td><td>1A<sub>7</sub></td><td>1A<sub>6</sub></td><td>1A<sub>5</sub></td><td>1A<sub>4</sub></td><td>1A<sub>3</sub></td><td>1A<sub>2</sub></td><td>1A<sub>1</sub></td><td>1A<sub>0</sub></td><td>1B<sub>7</sub></td><td>1B<sub>6</sub></td><td>1B<sub>5</sub></td><td>1B<sub>4</sub></td><td>1B<sub>3</sub></td><td>1B<sub>2</sub></td><td>1B<sub>1</sub></td><td>1B<sub>0</sub></td><td>1C<sub>7</sub></td></tr></tbody></table>
+</section>
+
+<section>
+  <h2>C Appendix: instruction set</h2>
+  <p>The 70 opcodes implemented by the SPLB20 core, with cycle counts from <code>cores/SPLB20.py</code>.</p>
+  <div class="cols2"><table class="compact"><thead><tr><th>Op</th><th>Mn</th><th>Mode</th><th>Cycles</th></tr></thead><tbody><tr><td>$00</td><td><code>brk</code></td><td>impl</td><td>7</td></tr><tr><td>$05</td><td><code>ora</code></td><td>zp</td><td>3</td></tr><tr><td>$08</td><td><code>php</code></td><td>impl</td><td>3</td></tr><tr><td>$09</td><td><code>ora</code></td><td>#imm</td><td>2</td></tr><tr><td>$10</td><td><code>bpl</code></td><td>rel</td><td>2 / 3 (+1 page)</td></tr><tr><td>$18</td><td><code>clc</code></td><td>impl</td><td>2</td></tr><tr><td>$20</td><td><code>jsr</code></td><td>abs</td><td>6</td></tr><tr><td>$24</td><td><code>bit</code></td><td>zp</td><td>3</td></tr><tr><td>$25</td><td><code>and</code></td><td>zp</td><td>3</td></tr><tr><td>$26</td><td><code>rol</code></td><td>zp</td><td>5</td></tr><tr><td>$28</td><td><code>plp</code></td><td>impl</td><td>4</td></tr><tr><td>$29</td><td><code>and</code></td><td>#imm</td><td>2</td></tr><tr><td>$2A</td><td><code>rol</code></td><td>A</td><td>2</td></tr><tr><td>$2C</td><td><code>bit</code></td><td>abs</td><td>4</td></tr><tr><td>$30</td><td><code>bmi</code></td><td>rel</td><td>2 / 3 (+1 page)</td></tr><tr><td>$38</td><td><code>sec</code></td><td>impl</td><td>2</td></tr><tr><td>$40</td><td><code>rti</code></td><td>impl</td><td>6</td></tr><tr><td>$45</td><td><code>eor</code></td><td>zp</td><td>3</td></tr><tr><td>$48</td><td><code>pha</code></td><td>impl</td><td>3</td></tr><tr><td>$49</td><td><code>eor</code></td><td>#imm</td><td>2</td></tr><tr><td>$4C</td><td><code>jmp</code></td><td>abs</td><td>3</td></tr><tr><td>$50</td><td><code>bvc</code></td><td>rel</td><td>2 / 3 (+1 page)</td></tr><tr><td>$55</td><td><code>eor</code></td><td>zp,X</td><td>4</td></tr><tr><td>$58</td><td><code>cli</code></td><td>impl</td><td>2</td></tr><tr><td>$60</td><td><code>rts</code></td><td>impl</td><td>6</td></tr><tr><td>$65</td><td><code>adc</code></td><td>zp</td><td>3</td></tr><tr><td>$66</td><td><code>ror</code></td><td>zp</td><td>5</td></tr><tr><td>$68</td><td><code>pla</code></td><td>impl</td><td>4</td></tr><tr><td>$69</td><td><code>adc</code></td><td>#imm</td><td>2</td></tr><tr><td>$6A</td><td><code>ror</code></td><td>A</td><td>2</td></tr><tr><td>$6C</td><td><code>jmp</code></td><td>(ind)</td><td>6</td></tr><tr><td>$70</td><td><code>bvs</code></td><td>rel</td><td>2 / 3 (+1 page)</td></tr><tr><td>$78</td><td><code>sei</code></td><td>impl</td><td>2</td></tr><tr><td>$81</td><td><code>sta</code></td><td>(zp,X)</td><td>6</td></tr><tr><td>$85</td><td><code>sta</code></td><td>zp</td><td>3</td></tr></tbody></table><table class="compact"><thead><tr><th>Op</th><th>Mn</th><th>Mode</th><th>Cycles</th></tr></thead><tbody><tr><td>$86</td><td><code>stx</code></td><td>zp</td><td>3</td></tr><tr><td>$8A</td><td><code>txa</code></td><td>impl</td><td>2</td></tr><tr><td>$8E</td><td><code>stx</code></td><td>abs</td><td>4</td></tr><tr><td>$90</td><td><code>bcc</code></td><td>rel</td><td>2 / 3 (+1 page)</td></tr><tr><td>$95</td><td><code>sta</code></td><td>zp,X</td><td>4</td></tr><tr><td>$9A</td><td><code>txs</code></td><td>impl</td><td>2</td></tr><tr><td>$A1</td><td><code>lda</code></td><td>(zp,X)</td><td>6</td></tr><tr><td>$A2</td><td><code>ldx</code></td><td>#imm</td><td>2</td></tr><tr><td>$A5</td><td><code>lda</code></td><td>zp</td><td>3</td></tr><tr><td>$A6</td><td><code>ldx</code></td><td>zp</td><td>3</td></tr><tr><td>$A9</td><td><code>lda</code></td><td>#imm</td><td>2</td></tr><tr><td>$AA</td><td><code>tax</code></td><td>impl</td><td>2</td></tr><tr><td>$AD</td><td><code>lda</code></td><td>abs</td><td>4</td></tr><tr><td>$AE</td><td><code>ldx</code></td><td>abs</td><td>4</td></tr><tr><td>$B0</td><td><code>bcs</code></td><td>rel</td><td>2 / 3 (+1 page)</td></tr><tr><td>$B5</td><td><code>lda</code></td><td>zp,X</td><td>4</td></tr><tr><td>$B8</td><td><code>clv</code></td><td>impl</td><td>2</td></tr><tr><td>$BA</td><td><code>tsx</code></td><td>impl</td><td>2</td></tr><tr><td>$BD</td><td><code>lda</code></td><td>abs,X</td><td>?</td></tr><tr><td>$C5</td><td><code>cmp</code></td><td>zp</td><td>3</td></tr><tr><td>$C6</td><td><code>dec</code></td><td>zp</td><td>5</td></tr><tr><td>$C9</td><td><code>cmp</code></td><td>#imm</td><td>2</td></tr><tr><td>$CA</td><td><code>dex</code></td><td>impl</td><td>2</td></tr><tr><td>$D0</td><td><code>bne</code></td><td>rel</td><td>2 / 3 (+1 page)</td></tr><tr><td>$D5</td><td><code>cmp</code></td><td>zp,X</td><td>4</td></tr><tr><td>$D6</td><td><code>dec</code></td><td>zp,X</td><td>6</td></tr><tr><td>$E0</td><td><code>cpx</code></td><td>#imm</td><td>2</td></tr><tr><td>$E4</td><td><code>cpx</code></td><td>zp</td><td>3</td></tr><tr><td>$E5</td><td><code>sbc</code></td><td>zp</td><td>3</td></tr><tr><td>$E6</td><td><code>inc</code></td><td>zp</td><td>5</td></tr><tr><td>$E8</td><td><code>inx</code></td><td>impl</td><td>2</td></tr><tr><td>$E9</td><td><code>sbc</code></td><td>#imm</td><td>2</td></tr><tr><td>$EA</td><td><code>nop</code></td><td>impl</td><td>2</td></tr><tr><td>$F0</td><td><code>beq</code></td><td>rel</td><td>2 / 3 (+1 page)</td></tr><tr><td>$F8</td><td><code>sed</code></td><td>impl</td><td>2</td></tr></tbody></table></div>
+</section>
+
+</body>
+</html>

@@ -1,0 +1,7 @@
+build/
+*.elf
+*.map
+*.sav
+/linktest/*.gba
+/elfin/*.gba
+__pycache__/

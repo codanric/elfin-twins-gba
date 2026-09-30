@@ -1,0 +1,42 @@
+# Publishes a GitHub release when a version tag (v1.0, v1.1, ...) is pushed.
+# The prebuilt ROMs and PDFs in the repository are attached as downloads;
+# the ROMs are then rebuilt from source to check they match.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=".github/release-notes/${GITHUB_REF_NAME}.md"
+          [ -f "$notes" ] || notes=/dev/null
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Elfin Twins GM-021 for GBA ${GITHUB_REF_NAME}" \
+            --notes-file "$notes" \
+            gba/release/elfin-twins.gba \
+            gba/release/elfin-linktest.gba \
+            gba/docs/Elfin_Twins_GM-021_Manual.pdf \
+            gba/docs/Elfin_Twins_GM-021_Technical_Reference.pdf
+
+      - name: Rebuild the ROMs from source and compare
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-arm-none-eabi
+          make -C gba/elfin
+          make -C gba/linktest
+          cmp gba/elfin/elfin-twins.gba gba/release/elfin-twins.gba
+          cmp gba/linktest/elfin-linktest.gba gba/release/elfin-linktest.gba
+          echo "Rebuilt ROMs are identical to the released ones."

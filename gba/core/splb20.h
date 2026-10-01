@@ -115,7 +115,7 @@ struct splb20 {
     const uint8_t *rom;
     uint32_t rom_mask;
     uint32_t rom_offset;
-} splb20_t;
+};
 
 /* On the GBA the core lives in IWRAM; callers in ROM need long calls. */
 #if defined(__GBA__)

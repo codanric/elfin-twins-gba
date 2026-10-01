@@ -6,7 +6,9 @@ on:
     branches: [main]
 
 concurrency:
-  group: gba-native-link-${{ github.ref }}
+  # Include the checked-out commit so a wedged emulator job cannot block a
+  # newer diagnostic run. Stale runs can finish independently.
+  group: gba-native-link-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:

@@ -29,6 +29,7 @@
 #define GBA_SIO_CHILD       0x0004
 #define GBA_SIO_READY       0x0008
 #define GBA_SIO_ERROR       0x0040
+#define GBA_SIO_IRQ         0x4000
 
 /* 16-bit application frame: magic | type | sequence | nibble payload. */
 #define ELINK_MAGIC         0xA000
@@ -88,6 +89,8 @@ typedef struct {
 
 void gba_link_init(gba_link_t *l);
 void gba_link_set_enabled(gba_link_t *l, int enabled);
+/* Called directly from the GBA SERIAL IRQ on transfer completion. */
+void gba_link_on_serial(gba_link_t *l);
 void gba_link_service(gba_link_t *l);
 
 int gba_link_send_count(gba_link_t *l, uint8_t count);

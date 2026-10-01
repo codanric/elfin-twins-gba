@@ -769,7 +769,7 @@ static int32_t next_event(const splb20_t *c) {
 }
 
 /*
- * The PC hook is currently used by the GBA front end for the three Elfin
+ * The PC hook is currently used by the GBA front end for the Elfin
  * link entry points. splb20_run() normally executes awake code through its
  * batched fast path, bypassing splb20_step(); stop at these PCs so the hook
  * is guaranteed to run before the intercepted ROM instruction executes.
@@ -780,7 +780,8 @@ static int32_t next_event(const splb20_t *c) {
 static inline __attribute__((always_inline)) int pc_hook_trap(const splb20_t *c) {
     if (!c->pc_hook)
         return 0;
-    return c->pc == 0xBE0A || c->pc == 0xBE41 || c->pc == 0xBA91;
+    return c->pc == 0xBE0A || c->pc == 0xBE41 ||
+           c->pc == 0xBDB4 || c->pc == 0xBA91;
 }
 
 int32_t SPLB20_FAST splb20_run(splb20_t *c, int32_t budget_fp) {

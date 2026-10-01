@@ -123,7 +123,17 @@ int gba_link_send_edge_count(gba_link_t *l, uint8_t edges) {
         return 0;
 
     l->tx_word = frame_make(edges);
-    l->tx_pending = 1;
+    if (l->parent) {
+        l->tx_pending = 1;
+    } else {
+        /*
+         * Slaves must have their next word loaded before the parent clocks
+         * the next transfer. The serial IRQ has already returned by the time
+         * the emulated CPU reaches this point, so write it immediately.
+         */
+        GBA_REG_SIOMLT_SEND = l->tx_word;
+        l->tx_pending = 0;
+    }
     l->edges_tx++;
     return 1;
 }

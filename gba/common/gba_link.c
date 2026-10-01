@@ -227,10 +227,10 @@ void gba_link_service(gba_link_t *l) {
     }
 
     /*
-     * Both roles poll the hardware BUSY bit. On a slave, the START bit is
-     * observable for roughly the entire 38400-bps transfer (~417 us), while
-     * this service runs every ~61 us. That gives several observations even if
-     * one timer interrupt is delayed.
+     * Both roles may observe the hardware BUSY bit. The pacing interrupt is
+     * intentionally much slower than one 38.4-kbps transfer, so SERIAL IRQ is
+     * authoritative on a child. A console that did observe BUSY may still use
+     * the state below as a narrow lost-IRQ fallback.
      */
     if (cnt & GBA_SIO_START) {
         l->transfer_started_seen = 1;
@@ -263,13 +263,12 @@ void gba_link_service(gba_link_t *l) {
 
     if (!l->parent) {
         /*
-         * If SERIAL was lost, re-read the stable post-transfer register. This
-         * is idempotent because DATA carries a sequence number.
+         * Do not treat a stable SIOMULTI0 value as a fresh transfer on every
+         * timer tick. SERIAL completion is authoritative for a child; if we
+         * happened to observe BUSY above, the transfer_active fallback already
+         * handled a missed IRQ. Otherwise keep the already-loaded response.
          */
-        if (!l->transfer_active) {
-            handle_rx(l, GBA_REG_SIOMULTI0);
-            slave_preload(l);
-        }
+        slave_preload(l);
         return;
     }
 
@@ -297,6 +296,8 @@ void gba_link_on_serial(gba_link_t *l) {
 
     cnt = GBA_REG_SIOCNT;
     l->last_sio = cnt;
+    l->ready = (uint8_t)((cnt & GBA_SIO_READY) != 0);
+    l->parent = (uint8_t)((cnt & GBA_SIO_CHILD) == 0);
 
     if (cnt & GBA_SIO_ERROR) {
         ++l->sio_errors;
@@ -318,10 +319,12 @@ void gba_link_on_serial(gba_link_t *l) {
     handle_rx(l, rx);
 
     if (!l->parent) {
-        /* Child has no clock; preload the response for the next parent start. */
+        /* Child has no clock; preload exactly one response for the next
+         * parent start and do not let timer service overwrite it. */
         uint16_t next = make_next_tx(l);
         GBA_REG_SIOMLT_SEND = next;
         l->last_tx_word = next;
+        l->slave_word_loaded = 1;
     }
 }
 

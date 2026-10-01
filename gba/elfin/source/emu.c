@@ -282,6 +282,28 @@ void __attribute__((section(".iwram"), long_call)) emu_isr(void) {
 
 void emu_init(void) {
     memcpy32(rom_copy, elfin_rom, ELFIN_ROM_SIZE / 4);
+
+    /*
+     * DIAGNOSTIC BUILD ONLY.
+     *
+     * Keep the original cold-start initialization through $989E, then replace
+     * the birth/opening sequence beginning at $98A0 with:
+     *
+     *   lda #1 ; sta tummy
+     *   lda #1 ; sta drinks
+     *   jmp home_tick ($98E8)
+     *
+     * This preserves the ROM's real newborn stat initialization and real home
+     * setup while making Link hardware iteration immediate.
+     */
+    static const uint8_t link_diag_boot[] = {
+        0xA9, 0x01, 0x85, 0x93,
+        0xA9, 0x01, 0x85, 0x94,
+        0x4C, 0xE8, 0x98
+    };
+    memcpy(rom_copy + (0x98A0 - 0x8000),
+           link_diag_boot, sizeof(link_diag_boot));
+
     splb20_init(&cpu, rom_copy, ELFIN_ROM_SIZE, EMU_CLOCK, 0, 0xFF);
     applied_buttons = 0;
 

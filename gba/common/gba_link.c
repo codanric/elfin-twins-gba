@@ -23,6 +23,7 @@ static int decode_frame(uint16_t w, uint16_t *type, uint8_t *seq, uint8_t *value
 static void reset_session(gba_link_t *l) {
     l->peer_seen = 0;
     l->answer_armed = 0;
+    l->recv_armed = 0;
     l->tx_seq = 0;
     l->tx_inflight = 0;
     l->tx_wait_seq = 0;

@@ -41,16 +41,16 @@ static const char sram_signature[] __attribute__((used)) = "SRAM_V113";
 #define PROBE_MAGIC2 'N'
 #define PROBE_MAGIC3 'K'
 
-static void probe_u16(unsigned off, uint16_t v) {
-    PROBE_SRAM[off + 0] = (uint8_t)v;
-    PROBE_SRAM[off + 1] = (uint8_t)(v >> 8);
+static void probe_u16(volatile uint8_t *p, unsigned off, uint16_t v) {
+    p[off + 0] = (uint8_t)v;
+    p[off + 1] = (uint8_t)(v >> 8);
 }
 
-static void probe_u32(unsigned off, uint32_t v) {
-    PROBE_SRAM[off + 0] = (uint8_t)v;
-    PROBE_SRAM[off + 1] = (uint8_t)(v >> 8);
-    PROBE_SRAM[off + 2] = (uint8_t)(v >> 16);
-    PROBE_SRAM[off + 3] = (uint8_t)(v >> 24);
+static void probe_u32(volatile uint8_t *p, unsigned off, uint32_t v) {
+    p[off + 0] = (uint8_t)v;
+    p[off + 1] = (uint8_t)(v >> 8);
+    p[off + 2] = (uint8_t)(v >> 16);
+    p[off + 3] = (uint8_t)(v >> 24);
 }
 
 /* A fixed 36-byte record used by emulator CI and useful on real hardware
@@ -65,26 +65,31 @@ static void probe_u32(unsigned off, uint32_t v) {
  *  9  app_last_count
  */
 static void write_probe_record(void) {
-    PROBE_SRAM[0] = PROBE_MAGIC0;
-    PROBE_SRAM[1] = PROBE_MAGIC1;
-    PROBE_SRAM[2] = PROBE_MAGIC2;
-    PROBE_SRAM[3] = PROBE_MAGIC3;
-    PROBE_SRAM[4] = 1;
-    PROBE_SRAM[5] = link.local_id;
-    PROBE_SRAM[6] = link.parent;
-    PROBE_SRAM[7] = link.ready;
-    PROBE_SRAM[8] = link.peer_seen;
-    PROBE_SRAM[9] = app_last_count;
-    PROBE_SRAM[10] = 0;
-    PROBE_SRAM[11] = 0;
-    probe_u32(12, link.frames_rx);
-    probe_u32(16, link.frames_tx);
-    probe_u32(20, link.sio_errors);
-    probe_u32(24, app_rx_count);
-    probe_u16(28, link.last_rx_word);
-    probe_u16(30, link.last_tx_word);
-    probe_u16(32, link.last_sio);
-    probe_u16(34, (uint16_t)serial_irqs);
+    /* When mGBA opens the same ROM twice both cores map the same save file
+     * MAP_SHARED. Give each hardware multiplayer ID its own SRAM slot so the
+     * two real ROM instances leave one combined, race-free evidence record. */
+    volatile uint8_t *p = PROBE_SRAM + ((unsigned)(link.local_id & 3) * 64);
+
+    p[0] = PROBE_MAGIC0;
+    p[1] = PROBE_MAGIC1;
+    p[2] = PROBE_MAGIC2;
+    p[3] = PROBE_MAGIC3;
+    p[4] = 1;
+    p[5] = link.local_id;
+    p[6] = link.parent;
+    p[7] = link.ready;
+    p[8] = link.peer_seen;
+    p[9] = app_last_count;
+    p[10] = 0;
+    p[11] = 0;
+    probe_u32(p, 12, link.frames_rx);
+    probe_u32(p, 16, link.frames_tx);
+    probe_u32(p, 20, link.sio_errors);
+    probe_u32(p, 24, app_rx_count);
+    probe_u16(p, 28, link.last_rx_word);
+    probe_u16(p, 30, link.last_tx_word);
+    probe_u16(p, 32, link.last_sio);
+    probe_u16(p, 34, (uint16_t)serial_irqs);
 }
 
 static void put(int row, const char *s) {

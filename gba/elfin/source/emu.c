@@ -152,7 +152,7 @@ static void link_sync_in(void) {
 }
 
 static void link_sync_out(void) {
-    (void)elfin_link_after(&link, &cpu);
+    (void)elfin_link_after(&link, &cpu, rx_wire_low != 0);
 
     if (link.tx_wake_ready) {
         if (gba_link_send_wake(&cable_link))

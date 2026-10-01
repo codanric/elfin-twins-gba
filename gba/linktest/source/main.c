@@ -31,6 +31,62 @@ static uint32_t vsync_services;
 static uint32_t app_rx_count;
 static uint8_t app_last_count;
 
+/* Standard GBA save-type signature so emulators/flashcarts allocate SRAM for
+ * the machine-readable multiplayer probe below. */
+static const char sram_signature[] __attribute__((used)) = "SRAM_V113";
+
+#define PROBE_SRAM ((volatile uint8_t *)0x0E000000)
+#define PROBE_MAGIC0 'E'
+#define PROBE_MAGIC1 'L'
+#define PROBE_MAGIC2 'N'
+#define PROBE_MAGIC3 'K'
+
+static void probe_u16(unsigned off, uint16_t v) {
+    PROBE_SRAM[off + 0] = (uint8_t)v;
+    PROBE_SRAM[off + 1] = (uint8_t)(v >> 8);
+}
+
+static void probe_u32(unsigned off, uint32_t v) {
+    PROBE_SRAM[off + 0] = (uint8_t)v;
+    PROBE_SRAM[off + 1] = (uint8_t)(v >> 8);
+    PROBE_SRAM[off + 2] = (uint8_t)(v >> 16);
+    PROBE_SRAM[off + 3] = (uint8_t)(v >> 24);
+}
+
+/* A fixed 36-byte record used by emulator CI and useful on real hardware
+ * dumps. SRAM is an 8-bit bus, so every field is deliberately written bytewise.
+ *
+ *  0  "ELNK"        12 frames_rx      24 app_rx_count
+ *  4  version       16 frames_tx      28 last_rx_word
+ *  5  local_id      20 sio_errors     30 last_tx_word
+ *  6  parent                            32 SIOCNT
+ *  7  ready                             34 serial IRQs (low 16)
+ *  8  peer_seen
+ *  9  app_last_count
+ */
+static void write_probe_record(void) {
+    PROBE_SRAM[0] = PROBE_MAGIC0;
+    PROBE_SRAM[1] = PROBE_MAGIC1;
+    PROBE_SRAM[2] = PROBE_MAGIC2;
+    PROBE_SRAM[3] = PROBE_MAGIC3;
+    PROBE_SRAM[4] = 1;
+    PROBE_SRAM[5] = link.local_id;
+    PROBE_SRAM[6] = link.parent;
+    PROBE_SRAM[7] = link.ready;
+    PROBE_SRAM[8] = link.peer_seen;
+    PROBE_SRAM[9] = app_last_count;
+    PROBE_SRAM[10] = 0;
+    PROBE_SRAM[11] = 0;
+    probe_u32(12, link.frames_rx);
+    probe_u32(16, link.frames_tx);
+    probe_u32(20, link.sio_errors);
+    probe_u32(24, app_rx_count);
+    probe_u16(28, link.last_rx_word);
+    probe_u16(30, link.last_tx_word);
+    probe_u16(32, link.last_sio);
+    probe_u16(34, (uint16_t)serial_irqs);
+}
+
 static void put(int row, const char *s) {
     char buf[32];
     int n = (int)strlen(s);
@@ -161,5 +217,7 @@ int main(void) {
         put(17, "No GPIO pin mapping is used.");
         put(18, "Connect both GBAs, then use A/B.");
         put(19, "Both units should say READY.");
+
+        write_probe_record();
     }
 }

@@ -1,7 +1,6 @@
 #include "gba_link.h"
 #include <string.h>
 
-#define TX_WAKE_MARK 0x80
 #define GBA_REG_IME (*(volatile uint16_t *)0x04000208)
 
 static uint16_t link_irq_lock(void) {
@@ -14,47 +13,6 @@ static void link_irq_unlock(uint16_t ime) {
     GBA_REG_IME = ime;
 }
 
-static uint16_t make_frame(uint16_t type, uint8_t seq, uint8_t value) {
-    return (uint16_t)(ELINK_MAGIC | type |
-                      ((uint16_t)(seq & 0x0F) << 4) |
-                      (value & 0x0F));
-}
-
-static int decode_frame(uint16_t w, uint16_t *type, uint8_t *seq, uint8_t *value) {
-    if ((w & ELINK_MAGIC_MASK) != ELINK_MAGIC)
-        return 0;
-
-    *type = (uint16_t)(w & ELINK_TYPE_MASK);
-    *seq = (uint8_t)((w >> 4) & 0x0F);
-    *value = (uint8_t)(w & 0x0F);
-    return 1;
-}
-
-static void reset_session(gba_link_t *l) {
-    l->peer_seen = 0;
-    l->answer_armed = 0;
-    l->recv_armed = 0;
-    l->tx_seq = 0;
-    l->tx_inflight = 0;
-    l->tx_wait_seq = 0;
-    l->tx_wait_value = 0;
-    l->tx_head = l->tx_len = 0;
-    l->rx_expected = 0;
-    l->rx_head = l->rx_len = 0;
-    l->ack_pending = 0;
-    l->ack_seq = 0;
-    l->wake_pending = 0;
-    l->wake_delivered = 0;
-    l->wake_only = 0;
-    l->transfer_ticks = 0;
-    l->transfer_active = 0;
-    l->transfer_started_seen = 0;
-    l->slave_word_loaded = 0;
-    l->last_rx_word = 0;
-    l->last_tx_word = 0;
-    l->last_sio = 0;
-}
-
 static int queue_push(uint8_t *q, uint8_t *head, uint8_t *len, uint8_t v) {
     if (*len >= ELINK_QUEUE_SIZE)
         return 0;
@@ -63,157 +21,155 @@ static int queue_push(uint8_t *q, uint8_t *head, uint8_t *len, uint8_t v) {
     return 1;
 }
 
-static uint8_t queue_peek(const uint8_t *q, uint8_t head) {
-    return q[head];
+static int queue_pop(uint8_t *q, uint8_t *head, uint8_t *len, uint8_t *v) {
+    if (!*len)
+        return 0;
+    *v = q[*head];
+    *head = (uint8_t)((*head + 1) & (ELINK_QUEUE_SIZE - 1));
+    --*len;
+    return 1;
 }
 
-static void queue_pop(uint8_t *head, uint8_t *len) {
-    if (*len) {
-        *head = (uint8_t)((*head + 1) & (ELINK_QUEUE_SIZE - 1));
-        --*len;
-    }
+static uint8_t sio_id(uint16_t cnt) {
+    return (uint8_t)((cnt & GBA_SIO_ID_MASK) >> 4);
 }
 
-static uint16_t make_next_tx(gba_link_t *l) {
-    if (l->ack_pending) {
-        uint16_t w = make_frame(ELINK_ACK, l->ack_seq, 0);
-        /*
-         * ACKs are retransmitted when the peer retransmits DATA, so one
-         * completed transfer is enough to clear the pending flag.
-         */
-        l->ack_pending = 0;
-        return w;
-    }
-
-    if (l->tx_inflight) {
-        uint16_t type = (l->tx_wait_value & TX_WAKE_MARK) ? ELINK_WAKE : ELINK_DATA;
-        return make_frame(type, l->tx_wait_seq, l->tx_wait_value);
-    }
-
-    if (!l->peer_seen)
-        return make_frame(ELINK_HELLO, 0, 1);
-
-    if (l->tx_len) {
-        l->tx_wait_seq = l->tx_seq;
-        l->tx_wait_value = queue_peek(l->tx_queue, l->tx_head);
-        l->tx_inflight = 1;
-        queue_pop(&l->tx_head, &l->tx_len);
-        return make_frame((l->tx_wait_value & TX_WAKE_MARK) ? ELINK_WAKE : ELINK_DATA,
-                          l->tx_wait_seq, l->tx_wait_value);
-    }
-
-    return make_frame(ELINK_PING, 0, 0);
+/*
+ * Pokemon Emerald determines master from the physical SD/SI terminal state
+ * and local multiplayer ID, not from one bit interpreted as "parent".
+ */
+static uint8_t sio_is_master(uint16_t cnt) {
+    return (uint8_t)(((cnt & (GBA_SIO_MULTI_SD | GBA_SIO_MULTI_SI))
+                      == GBA_SIO_MULTI_SD) &&
+                     sio_id(cnt) == 0);
 }
 
-static void handle_rx(gba_link_t *l, uint16_t word) {
-    uint16_t type;
-    uint8_t seq, value;
-
-    l->last_rx_word = word;
-    if (!decode_frame(word, &type, &seq, &value))
-        return;
-
-    switch (type) {
-    case ELINK_HELLO:
-        if (value != 1) {
-            l->ack_pending = 1;
-            l->ack_seq = 0x0F;
-            return;
-        }
-        l->peer_seen = 1;
-        break;
-
-    case ELINK_DATA:
-    case ELINK_WAKE:
-        l->peer_seen = 1;
-
-        /*
-         * DATA and WAKE share one reliable sequence stream per direction.
-         * WAKE models the long BA91 responder pulse: it wakes the original
-         * ROM but deliberately does not enqueue a link_recv count.
-         */
-        if (seq == l->rx_expected) {
-            if (type == ELINK_DATA &&
-                !queue_push(l->rx_queue, &l->rx_head, &l->rx_len, value))
-                break;
-
-            l->rx_expected = (uint8_t)((seq + 1) & 0x0F);
-            l->wake_pending = 1;
-            l->wake_delivered = 0;
-            l->wake_only = (uint8_t)(type == ELINK_WAKE);
-        } else if (seq == (uint8_t)((l->rx_expected - 1) & 0x0F)) {
-            /* Duplicate: ACK again without re-triggering the emulated wake. */
-        } else {
-            break;
-        }
-
-        l->ack_pending = 1;
-        l->ack_seq = seq;
-        ++l->frames_rx;
-        break;
-
-    case ELINK_ACK:
-        if (l->tx_inflight && seq == l->tx_wait_seq) {
-            l->tx_inflight = 0;
-            l->tx_seq = (uint8_t)((seq + 1) & 0x0F);
-            ++l->frames_tx;
-        }
-        break;
-
-    case ELINK_RESET:
-        reset_session(l);
-        break;
-
-    case ELINK_PING:
-        l->peer_seen = 1;
-        break;
-
-    default:
-        break;
-    }
+static uint16_t event_word(uint8_t event) {
+    if (event & ELINK_TX_WAKE)
+        return ELINK_WAKE;
+    return (uint16_t)(ELINK_DATA | (event & ELINK_VALUE_MASK));
 }
 
-static void slave_preload(gba_link_t *l) {
-    if (l->parent || l->slave_word_loaded)
-        return;
+static int is_payload(uint16_t w) {
+    uint16_t kind = (uint16_t)(w & ELINK_KIND_MASK);
+    return kind == ELINK_DATA || kind == ELINK_WAKE;
+}
 
-    uint16_t next = make_next_tx(l);
-    GBA_REG_SIOMLT_SEND = next;
-    l->last_tx_word = next;
-    l->slave_word_loaded = 1;
+static void reset_session(gba_link_t *l) {
+    l->ready = 0;
+    l->parent = 0;
+    l->peer_seen = 0;
+    l->local_id = 0;
+
+    l->tx_head = l->tx_len = 0;
+    l->rx_head = l->rx_len = 0;
+
+    l->wake_pending = 0;
+    l->wake_delivered = 0;
+    l->wake_only = 0;
+    l->answer_armed = 0;
+    l->recv_armed = 0;
+
+    l->tx_word = ELINK_HELLO;
+    l->last_rx_word = 0;
+    l->last_tx_word = 0;
+    l->last_sio = 0;
+}
+
+static void sample_role(gba_link_t *l, uint16_t cnt) {
+    l->last_sio = cnt;
+    l->local_id = sio_id(cnt);
+    l->parent = sio_is_master(cnt);
+}
+
+/* Load exactly one word for the *next* hardware transfer. */
+static void preload_next(gba_link_t *l) {
+    uint8_t event;
+    uint16_t word;
+
+    if (queue_pop(l->tx_queue, &l->tx_head, &l->tx_len, &event))
+        word = event_word(event);
+    else if (!l->peer_seen)
+        word = ELINK_HELLO;
+    else
+        word = ELINK_IDLE;
+
+    l->tx_word = word;
+    GBA_REG_SIOMLT_SEND = word;
 }
 
 static void hw_start(gba_link_t *l) {
-    /* No GPIO mode. RCNT bit 15 must remain zero. */
+    /*
+     * This is the retail-game initialization sequence used by Emerald:
+     * RCNT=0, multiplayer mode, 115200 bps, SERIAL interrupt enabled.
+     */
     GBA_REG_RCNT = 0;
-    GBA_REG_SIOCNT = GBA_SIO_MULTI | GBA_SIO_BAUD_38400 | GBA_SIO_IRQ;
-    GBA_REG_SIOMLT_SEND = make_frame(ELINK_HELLO, 0, 1);
+    GBA_REG_SIOCNT = GBA_SIO_MULTI | GBA_SIO_BAUD_115200 | GBA_SIO_IRQ;
 
-    l->hw_enabled = 1;
-    l->ready = 0;
-    l->parent = 0;
     reset_session(l);
+    l->hw_enabled = 1;
+    GBA_REG_SIOMLT_SEND = l->tx_word;
+}
+
+static void handle_peer_word(gba_link_t *l, uint16_t word) {
+    uint16_t kind = (uint16_t)(word & ELINK_KIND_MASK);
+
+    if (word == ELINK_HELLO) {
+        l->peer_seen = 1;
+        l->ready = 1;
+        l->last_rx_word = word;
+        return;
+    }
+
+    if (kind == ELINK_DATA) {
+        uint8_t value = (uint8_t)(word & ELINK_VALUE_MASK);
+        if (!queue_push(l->rx_queue, &l->rx_head, &l->rx_len, value))
+            return;
+        l->peer_seen = 1;
+        l->ready = 1;
+        l->last_rx_word = word;
+        l->wake_pending = 1;
+        l->wake_delivered = 0;
+        l->wake_only = 0;
+        ++l->frames_rx;
+        return;
+    }
+
+    if (kind == ELINK_WAKE) {
+        l->peer_seen = 1;
+        l->ready = 1;
+        l->last_rx_word = word;
+        l->wake_pending = 1;
+        l->wake_delivered = 0;
+        l->wake_only = 1;
+        ++l->frames_rx;
+    }
+}
+
+static uint16_t multi_word(unsigned i) {
+    switch (i) {
+    case 0: return GBA_REG_SIOMULTI0;
+    case 1: return GBA_REG_SIOMULTI1;
+    case 2: return GBA_REG_SIOMULTI2;
+    default: return GBA_REG_SIOMULTI3;
+    }
 }
 
 void gba_link_init(gba_link_t *l) {
     memset(l, 0, sizeof(*l));
-    l->enabled = 0;
-    l->hw_enabled = 0;
 }
 
 void gba_link_set_enabled(gba_link_t *l, int enabled) {
     enabled = enabled != 0;
-
     if (enabled == l->enabled)
         return;
 
     l->enabled = (uint8_t)enabled;
-
     if (!enabled) {
-        GBA_REG_SIOCNT = 0;
+        GBA_REG_SIOCNT = GBA_SIO_MULTI;
         GBA_REG_RCNT = 0;
+        GBA_REG_SIOMLT_SEND = 0;
         l->hw_enabled = 0;
-        l->ready = 0;
         reset_session(l);
         return;
     }
@@ -222,129 +178,74 @@ void gba_link_set_enabled(gba_link_t *l, int enabled) {
 }
 
 void gba_link_service(gba_link_t *l) {
-    uint16_t cnt, rx;
+    uint16_t cnt;
 
     if (!l->enabled || !l->hw_enabled)
         return;
 
     cnt = GBA_REG_SIOCNT;
-    l->last_sio = cnt;
-
-    if (cnt & GBA_SIO_ERROR) {
-        ++l->sio_errors;
-        hw_start(l);
-        return;
-    }
-
-    l->ready = (uint8_t)((cnt & GBA_SIO_READY) != 0);
-    l->parent = (uint8_t)((cnt & GBA_SIO_CHILD) == 0);
-
-    if (!l->ready) {
-        l->transfer_active = 0;
-        l->transfer_started_seen = 0;
-        return;
-    }
+    sample_role(l, cnt);
 
     /*
-     * Both roles may observe the hardware BUSY bit. The pacing interrupt is
-     * intentionally much slower than one 38.4-kbps transfer, so SERIAL IRQ is
-     * authoritative on a child. A console that did observe BUSY may still use
-     * the state below as a narrow lost-IRQ fallback.
+     * Emerald starts transfers only from the physical multiplayer master.
+     * If a transfer is already in progress, the timer tick is simply ignored.
      */
-    if (cnt & GBA_SIO_START) {
-        l->transfer_started_seen = 1;
-        l->transfer_active = 1;
-        if (!l->parent)
-            l->slave_word_loaded = 0;
-        return;
-    }
-
-    if (l->transfer_active && l->transfer_started_seen) {
-        l->transfer_active = 0;
-        l->transfer_started_seen = 0;
-
-        rx = l->parent ? GBA_REG_SIOMULTI1 : GBA_REG_SIOMULTI0;
-        handle_rx(l, rx);
-
-        /*
-         * The slave has no clock. Its next outgoing word must be in
-         * SIOMLT_SEND before the master starts again.
-         */
-        slave_preload(l);
-    }
-
-    /*
-     * A missed SERIAL IRQ must not permanently wedge the session. If the
-     * hardware is no longer BUSY, recover the completed transfer here.
-     */
-    if (l->transfer_active && !(cnt & GBA_SIO_START))
-        gba_link_on_serial(l);
-
-    if (!l->parent) {
-        /*
-         * Do not treat a stable SIOMULTI0 value as a fresh transfer on every
-         * timer tick. SERIAL completion is authoritative for a child; if we
-         * happened to observe BUSY above, the transfer_active fallback already
-         * handled a missed IRQ. Otherwise keep the already-loaded response.
-         */
-        slave_preload(l);
-        return;
-    }
-
-    if (l->transfer_active)
-        return;
-
-    /*
-     * Nintendo's own programmer documentation uses a guard interval between
-     * multiplayer transfers. 3.05 ms matches the interval used by established
-     * real-hardware GBA link implementations at 38.4 kbps.
-     */
-    uint16_t word = make_next_tx(l);
-    GBA_REG_SIOMLT_SEND = word;
-    l->last_tx_word = word;
-    GBA_REG_SIOCNT = GBA_SIO_MULTI | GBA_SIO_BAUD_38400 | GBA_SIO_IRQ | GBA_SIO_START;
-    l->transfer_active = 1;
-    l->transfer_started_seen = 1;
+    if (l->parent && !(cnt & GBA_SIO_START))
+        GBA_REG_SIOCNT = (uint16_t)(GBA_SIO_MULTI |
+                                    GBA_SIO_BAUD_115200 |
+                                    GBA_SIO_IRQ |
+                                    GBA_SIO_START);
 }
 
 void gba_link_on_serial(gba_link_t *l) {
-    uint16_t cnt, rx;
+    uint16_t cnt;
+    uint16_t sent;
+    unsigned i;
 
     if (!l->enabled || !l->hw_enabled)
         return;
 
     cnt = GBA_REG_SIOCNT;
-    l->last_sio = cnt;
-    l->ready = (uint8_t)((cnt & GBA_SIO_READY) != 0);
-    l->parent = (uint8_t)((cnt & GBA_SIO_CHILD) == 0);
+    sample_role(l, cnt);
 
     if (cnt & GBA_SIO_ERROR) {
         ++l->sio_errors;
-        hw_start(l);
-        return;
+        l->peer_seen = 0;
+        l->ready = 0;
     }
-
-    if (!(cnt & GBA_SIO_READY))
-        return;
 
     /*
-     * SERIAL is asserted when the current multiplayer transfer completes.
-     * This is the critical path on the child: timer polling alone can miss a
-     * sub-millisecond transfer while the emulator timer ISR is executing.
+     * The word that was preloaded before this IRQ is the word just sent.
+     * A DATA/WAKE event is therefore complete exactly once here.
      */
-    rx = l->parent ? GBA_REG_SIOMULTI1 : GBA_REG_SIOMULTI0;
-    l->transfer_active = 0;
-    l->transfer_started_seen = 0;
-    handle_rx(l, rx);
+    sent = l->tx_word;
+    l->last_tx_word = sent;
+    if (is_payload(sent))
+        ++l->frames_tx;
 
-    if (!l->parent) {
-        /* Child has no clock; preload exactly one response for the next
-         * parent start and do not let timer service overwrite it. */
-        uint16_t next = make_next_tx(l);
-        GBA_REG_SIOMLT_SEND = next;
-        l->last_tx_word = next;
-        l->slave_word_loaded = 1;
+    /*
+     * Multiplayer receive registers contain one synchronized word for each
+     * participant. Scan every slot except our own and accept only Elfin words;
+     * absent slots are normally 0xFFFF and idle slots are zero.
+     */
+    for (i = 0; i < 4; ++i) {
+        uint16_t word;
+        if (i == l->local_id)
+            continue;
+        word = multi_word(i);
+        if (word == ELINK_HELLO ||
+            (word & ELINK_KIND_MASK) == ELINK_DATA ||
+            (word & ELINK_KIND_MASK) == ELINK_WAKE) {
+            handle_peer_word(l, word);
+            break;
+        }
     }
+
+    /*
+     * Like Emerald's DoSend(), preload the next word immediately in SERIAL
+     * completion so a child is ready before the master starts again.
+     */
+    preload_next(l);
 }
 
 int gba_link_send_count(gba_link_t *l, uint8_t count) {
@@ -354,13 +255,9 @@ int gba_link_send_count(gba_link_t *l, uint8_t count) {
     if (!l->enabled)
         return 0;
 
-    /*
-     * SERIAL may preempt the emulator timer ISR. Protect the producer update
-     * so make_next_tx() can never observe a half-updated ring-buffer state.
-     */
     ime = link_irq_lock();
     ok = queue_push(l->tx_queue, &l->tx_head, &l->tx_len,
-                    (uint8_t)(count & 0x0F));
+                    (uint8_t)(count & ELINK_VALUE_MASK));
     link_irq_unlock(ime);
     return ok;
 }
@@ -373,22 +270,22 @@ int gba_link_send_wake(gba_link_t *l) {
         return 0;
 
     ime = link_irq_lock();
-    ok = queue_push(l->tx_queue, &l->tx_head, &l->tx_len, TX_WAKE_MARK);
+    ok = queue_push(l->tx_queue, &l->tx_head, &l->tx_len, ELINK_TX_WAKE);
     link_irq_unlock(ime);
     return ok;
 }
 
 int gba_link_recv_count(gba_link_t *l, uint8_t *count) {
     uint16_t ime;
+    uint8_t value;
     int ok = 0;
 
     ime = link_irq_lock();
-    if (l->rx_len) {
-        *count = queue_peek(l->rx_queue, l->rx_head);
-        queue_pop(&l->rx_head, &l->rx_len);
-
+    if (queue_pop(l->rx_queue, &l->rx_head, &l->rx_len, &value)) {
+        *count = value;
         if (!l->rx_len) {
             l->wake_pending = 0;
+            l->wake_delivered = 0;
             l->wake_only = 0;
         } else {
             l->wake_pending = 1;
@@ -401,7 +298,7 @@ int gba_link_recv_count(gba_link_t *l, uint8_t *count) {
 }
 
 int gba_link_is_ready(const gba_link_t *l) {
-    return l->enabled && l->ready && l->peer_seen;
+    return l->enabled && l->hw_enabled && l->peer_seen;
 }
 
 int gba_link_is_parent(const gba_link_t *l) {

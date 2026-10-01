@@ -37,6 +37,7 @@ jobs:
             /bin/bash -lc 'make -C gba/elfin && make -C gba/linktest'
 
       - name: Test two real ROM instances in mGBA multiplayer
+        timeout-minutes: 4
         run: |
           set -euo pipefail
           curl -fL --retry 3 \
@@ -51,71 +52,80 @@ jobs:
           test -x "$MGBA_QT"
 
           sudo apt-get update -qq
-          sudo apt-get install -y -qq \
+          sudo apt-get install -y -qq --no-install-recommends \
             xvfb openbox xdotool imagemagick \
             libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0
 
           "$MGBA_QT" --version | tee /tmp/mgba-version.txt
 
-          rm -f /tmp/mgba-*.png /tmp/mgba-windows.txt /tmp/mgba-ui.log
-          timeout 25s xvfb-run -a -s "-screen 0 1280x720x24" bash -lc '
-            set -euo pipefail
-            openbox >/tmp/openbox.log 2>&1 &
-            obpid=$!
-            trap "kill $obpid 2>/dev/null || true" EXIT
+          rm -f /tmp/mgba-*.png /tmp/mgba-windows.txt /tmp/mgba-ui.log \
+                /tmp/openbox.log /tmp/xvfb.log
 
-            "'"$MGBA_QT"'" \
-              "'"$GITHUB_WORKSPACE"'/gba/linktest/elfin-linktest.gba" \
-              "'"$GITHUB_WORKSPACE"'/gba/linktest/elfin-linktest.gba" \
-              >/tmp/mgba-ui.log 2>&1 &
-            mpid=$!
-            trap "kill $mpid $obpid 2>/dev/null || true" EXIT
-
-            for i in $(seq 1 100); do
-              mapfile -t wins < <(xdotool search --onlyvisible --name "mGBA" 2>/dev/null || true)
-              if [ "${#wins[@]}" -ge 2 ]; then break; fi
-              sleep 0.1
-            done
-
-            xwininfo -root -tree > /tmp/mgba-windows.txt
-            mapfile -t wins < <(xdotool search --onlyvisible --name "mGBA" 2>/dev/null || true)
-            printf "window_count=%d\n" "${#wins[@]}" >> /tmp/mgba-windows.txt
-            [ "${#wins[@]}" -ge 2 ]
-
-            w0="${wins[0]}"
-            w1="${wins[1]}"
-            printf "w0=%s title=%s\n" "$w0" "$(xdotool getwindowname "$w0")" >> /tmp/mgba-windows.txt
-            printf "w1=%s title=%s\n" "$w1" "$(xdotool getwindowname "$w1")" >> /tmp/mgba-windows.txt
-
-            xdotool windowmove "$w0" 20 20 windowsize "$w0" 500 390 || true
-            xdotool windowmove "$w1" 650 20 windowsize "$w1" 500 390 || true
-            sleep 4
-
-            import -window "$w0" /tmp/mgba-player0-before.png
-            import -window "$w1" /tmp/mgba-player1-before.png
-
-            # mGBA default keyboard map: X = GBA A. Send A to both instances;
-            # either role may queue DATA, and the parent clocks the shared bus.
-            for w in "$w0" "$w1"; do
-              xdotool keydown --window "$w" x
-              sleep 0.20
-              xdotool keyup --window "$w" x
-            done
-            sleep 3
-
-            import -window "$w0" /tmp/mgba-player0-after.png
-            import -window "$w1" /tmp/mgba-player1-after.png
-            import -window root /tmp/mgba-both-after.png
-
-            test -s /tmp/mgba-player0-after.png
-            test -s /tmp/mgba-player1-after.png
-
-            xdotool windowclose "$w0" || true
-            xdotool windowclose "$w1" || true
-            sleep 1
-            kill "$mpid" 2>/dev/null || true
+          Xvfb :99 -screen 0 1280x720x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
+          xpid=$!
+          export DISPLAY=:99
+          openbox >/tmp/openbox.log 2>&1 &
+          obpid=$!
+          mpid=
+          cleanup() {
+            if [ -n "${mpid:-}" ]; then kill "$mpid" 2>/dev/null || true; fi
+            kill "$obpid" "$xpid" 2>/dev/null || true
             wait "$mpid" 2>/dev/null || true
-          '
+            wait "$obpid" 2>/dev/null || true
+            wait "$xpid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          sleep 1
+
+          "$MGBA_QT" \
+            "$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.gba" \
+            "$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.gba" \
+            >/tmp/mgba-ui.log 2>&1 &
+          mpid=$!
+
+          for i in $(seq 1 120); do
+            mapfile -t wins < <(xdotool search --onlyvisible --name "mGBA" 2>/dev/null || true)
+            if [ "${#wins[@]}" -ge 2 ]; then break; fi
+            if ! kill -0 "$mpid" 2>/dev/null; then
+              cat /tmp/mgba-ui.log
+              exit 1
+            fi
+            sleep 0.1
+          done
+
+          xwininfo -root -tree > /tmp/mgba-windows.txt
+          mapfile -t wins < <(xdotool search --onlyvisible --name "mGBA" 2>/dev/null || true)
+          printf "window_count=%d\n" "${#wins[@]}" >> /tmp/mgba-windows.txt
+          [ "${#wins[@]}" -ge 2 ]
+
+          w0="${wins[0]}"
+          w1="${wins[1]}"
+          printf "w0=%s title=%s\n" "$w0" "$(xdotool getwindowname "$w0")" >> /tmp/mgba-windows.txt
+          printf "w1=%s title=%s\n" "$w1" "$(xdotool getwindowname "$w1")" >> /tmp/mgba-windows.txt
+
+          xdotool windowmove "$w0" 20 20
+          xdotool windowsize "$w0" 500 390
+          xdotool windowmove "$w1" 650 20
+          xdotool windowsize "$w1" 500 390
+          sleep 4
+
+          import -window "$w0" /tmp/mgba-player0-before.png
+          import -window "$w1" /tmp/mgba-player1-before.png
+
+          # mGBA default keyboard map: X = GBA A.
+          for w in "$w0" "$w1"; do
+            xdotool keydown --window "$w" x
+            sleep 0.20
+            xdotool keyup --window "$w" x
+          done
+          sleep 3
+
+          import -window "$w0" /tmp/mgba-player0-after.png
+          import -window "$w1" /tmp/mgba-player1-after.png
+          import -window root /tmp/mgba-both-after.png
+
+          test -s /tmp/mgba-player0-after.png
+          test -s /tmp/mgba-player1-after.png
 
           cat /tmp/mgba-windows.txt
           cat /tmp/mgba-ui.log || true
@@ -131,6 +141,7 @@ jobs:
             /tmp/mgba-windows.txt
             /tmp/mgba-ui.log
             /tmp/openbox.log
+            /tmp/xvfb.log
             /tmp/mgba-player0-before.png
             /tmp/mgba-player1-before.png
             /tmp/mgba-player0-after.png

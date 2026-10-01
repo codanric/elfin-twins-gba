@@ -60,12 +60,11 @@ jobs:
 
           "$MGBA_QT" --version | tee /tmp/mgba-version.txt
 
-          # Different ROM basenames force distinct .sav files. The link-test
-          # ROM writes a fixed ELNK probe record to SRAM every frame.
-          cp gba/linktest/elfin-linktest.gba /tmp/elfin-linktest-p0.gba
-          cp gba/linktest/elfin-linktest.gba /tmp/elfin-linktest-p1.gba
-          rm -f /tmp/elfin-linktest-p0.sav /tmp/elfin-linktest-p1.sav \
-                /tmp/mgba-ui.log /tmp/mgba-windows.txt
+          # Use the exact same ROM path twice: this is the multi-ROM launch
+          # form already proven to create two mGBA multiplayer windows. Each
+          # hardware player writes its probe to a different SRAM offset.
+          SAVE="$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.sav"
+          rm -f "$SAVE" /tmp/mgba-ui.log /tmp/mgba-windows.txt
 
           Xvfb :99 -screen 0 1280x720x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
           xpid=$!
@@ -83,9 +82,9 @@ jobs:
           trap cleanup EXIT
           sleep 1
 
-          "$MGBA_QT" -C savegamePath=/tmp \
-            /tmp/elfin-linktest-p0.gba \
-            /tmp/elfin-linktest-p1.gba \
+          "$MGBA_QT" \
+            "$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.gba" \
+            "$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.gba" \
             >/tmp/mgba-ui.log 2>&1 &
           mpid=$!
 
@@ -112,19 +111,18 @@ jobs:
             xdotool keyup --window "$w" x
           done
 
-          # Wait for each ROM's SRAM probe record to appear and be flushed.
+          # Both cores map the same SRAM file MAP_SHARED. Wait until the ROMs
+          # have created it, then allow several more VBlanks for DATA delivery.
           for i in $(seq 1 80); do
-            if [ -s /tmp/elfin-linktest-p0.sav ] && [ -s /tmp/elfin-linktest-p1.sav ]; then
-              break
-            fi
+            if [ -s "$SAVE" ]; then break; fi
             sleep 0.1
           done
           sleep 2
-          test -s /tmp/elfin-linktest-p0.sav
-          test -s /tmp/elfin-linktest-p1.sav
+          test -s "$SAVE"
 
-          python3 - <<'PY' | tee /tmp/mgba-probe.txt
+          python3 - "$SAVE" <<'PY' | tee /tmp/mgba-probe.txt
           from pathlib import Path
+          import sys
 
           def u16(b, o):
               return b[o] | (b[o+1] << 8)
@@ -132,37 +130,37 @@ jobs:
           def u32(b, o):
               return u16(b, o) | (u16(b, o+2) << 16)
 
-          def parse(path):
-              b = Path(path).read_bytes()
-              assert len(b) >= 36, (path, len(b))
-              assert b[:4] == b'ELNK', (path, b[:8].hex())
-              assert b[4] == 1, (path, b[4])
+          def parse_slot(b, base):
+              r = b[base:base + 36]
+              assert len(r) == 36, (base, len(r))
+              assert r[:4] == b'ELNK', (base, r[:8].hex())
+              assert r[4] == 1, (base, r[4])
               return {
-                  'path': path,
-                  'id': b[5],
-                  'parent': b[6],
-                  'ready': b[7],
-                  'peer': b[8],
-                  'app_last': b[9],
-                  'frames_rx': u32(b, 12),
-                  'frames_tx': u32(b, 16),
-                  'sio_errors': u32(b, 20),
-                  'app_rx': u32(b, 24),
-                  'last_rx': u16(b, 28),
-                  'last_tx': u16(b, 30),
-                  'sio': u16(b, 32),
-                  'serial_irqs': u16(b, 34),
+                  'slot': base // 64,
+                  'id': r[5],
+                  'parent': r[6],
+                  'ready': r[7],
+                  'peer': r[8],
+                  'app_last': r[9],
+                  'frames_rx': u32(r, 12),
+                  'frames_tx': u32(r, 16),
+                  'sio_errors': u32(r, 20),
+                  'app_rx': u32(r, 24),
+                  'last_rx': u16(r, 28),
+                  'last_tx': u16(r, 30),
+                  'sio': u16(r, 32),
+                  'serial_irqs': u16(r, 34),
               }
 
-          raw = [
-              parse('/tmp/elfin-linktest-p0.sav'),
-              parse('/tmp/elfin-linktest-p1.sav'),
-          ]
+          path = sys.argv[1]
+          b = Path(path).read_bytes()
+          assert len(b) >= 100, (path, len(b))
+          raw = [parse_slot(b, 0), parse_slot(b, 64)]
           reports = {r['id']: r for r in raw}
 
           for r in raw:
               print(
-                  f"{r['path']}: id={r['id']} parent={r['parent']} "
+                  f"slot={r['slot']} id={r['id']} parent={r['parent']} "
                   f"ready={r['ready']} peer={r['peer']} "
                   f"rx={r['frames_rx']} tx={r['frames_tx']} "
                   f"app_rx={r['app_rx']} app_last={r['app_last']} "
@@ -205,8 +203,7 @@ jobs:
             /tmp/mgba-ui.log
             /tmp/mgba-windows.txt
             /tmp/mgba-probe.txt
-            /tmp/elfin-linktest-p0.sav
-            /tmp/elfin-linktest-p1.sav
+            gba/linktest/elfin-linktest.sav
             /tmp/openbox.log
             /tmp/xvfb.log
 

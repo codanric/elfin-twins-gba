@@ -279,8 +279,12 @@ int gba_link_recv_count(gba_link_t *l, uint8_t *count) {
     *count = queue_peek(l->rx_queue, l->rx_head);
     queue_pop(&l->rx_head, &l->rx_len);
 
-    if (!l->rx_len)
+    if (!l->rx_len) {
         l->wake_pending = 0;
+    } else {
+        l->wake_pending = 1;
+        l->wake_delivered = 0;
+    }
 
     return 1;
 }

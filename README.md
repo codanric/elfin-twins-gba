@@ -56,9 +56,7 @@ A few things the GBA version adds:
   you were away and plays through that time in a couple of seconds. So yes, they'll be hungry in the
   morning. Feed them before you go.
 - **It saves on its own**, a few seconds after you press a button.
-- **Two GBAs can play together over a link cable**, using the toy's own two-player games. If nothing happens,
-  run `elfin-linktest.gba` on both consoles first. It tells you whether the cable and the clock are working.
-
+- **Two GBAs can play together over a link cable**, COMING SOON.
 Everything has been tested carefully in emulation. The link cable hasn't been tried on two real GBAs yet,
 because it depends on a small detail of the toy's chip that we still need to confirm on hardware. If you
 test it, we'd love to hear how it went.

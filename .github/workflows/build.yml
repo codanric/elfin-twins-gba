@@ -79,12 +79,11 @@ jobs:
             MGBA_QT=$(find /tmp/squashfs-root -type f -name 'mgba-qt' -perm -111 | head -1)
           fi
           test -x "$MGBA_QT"
-          "$MGBA_QT" --version
 
-          command -v xvfb-run >/dev/null || {
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq xvfb
-          }
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            xvfb libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0
+          "$MGBA_QT" --version
 
           rm -f /tmp/mgba-probe-*.txt /tmp/mgba-probe-*.png
           set +e

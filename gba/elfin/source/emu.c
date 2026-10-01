@@ -2,6 +2,7 @@
  * Emulation driver - see emu.h. Compiled as ARM code into IWRAM.
  */
 #include <tonc.h>
+#include <string.h>
 #include "emu.h"
 #include "assets.h"
 #include "gba_link.h"

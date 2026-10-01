@@ -19,7 +19,6 @@
 #include "elfin_catchup.h"
 #include "emu.h"
 #include "lcd.h"
-#include "linkio.h"
 #include "rtc.h"
 #include "save.h"
 
@@ -188,7 +187,7 @@ static void edit_rtc(void) {
 
 enum { M_RESUME, M_SOUND, M_LINK, M_AWAY, M_SYNC, M_BLUR, M_SETRTC, M_SAVE, M_RESET, M_COUNT };
 
-static const char *link_names[] = {"off", "SD wire", "SC wire"};
+static const char *link_names[] = {"off", "GBA cable", "GBA cable"};
 static const char *away_names[] = {"real time", "max 1 day", "paused"};
 
 static int confirm(const char *q) {

@@ -81,6 +81,7 @@ typedef struct {
     uint16_t transfer_ticks;
     uint8_t transfer_active;
     uint8_t transfer_started_seen;
+    uint8_t slave_word_loaded;
 
     uint32_t frames_rx;
     uint32_t frames_tx;

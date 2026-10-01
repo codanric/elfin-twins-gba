@@ -5,9 +5,9 @@ MAKER_CODE    := 00
 
 COMMON        := ../common
 CORE          := ../core
-SOURCES       := source/main.c source/save.c source/assets.c \
+SOURCES       := source/main.c source/save.c source/assets.c source/emu.c \
                  $(COMMON)/rtc.c $(COMMON)/gba_link.c $(CORE)/elfin_catchup.c
-IWRAM_SOURCES := source/emu.c source/lcd.c $(CORE)/splb20.c
+IWRAM_SOURCES := source/lcd.c $(CORE)/splb20.c
 INCLUDES      := source $(COMMON) $(CORE)
 
 all: $(TARGET).gba

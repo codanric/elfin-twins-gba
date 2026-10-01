@@ -22,7 +22,7 @@
 #include "rtc.h"
 #include "save.h"
 
-#define VERSION "1.0"
+#define VERSION "1.2"
 
 /* ------------------------------------------------------------ colours */
 #define C_BOX     RGB15(5, 5, 14)

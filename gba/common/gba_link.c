@@ -1,6 +1,8 @@
 #include "gba_link.h"
 #include <string.h>
 
+#define TX_WAKE_MARK 0x80
+
 static uint16_t make_frame(uint16_t type, uint8_t seq, uint8_t value) {
     return (uint16_t)(ELINK_MAGIC | type |
                       ((uint16_t)(seq & 0x0F) << 4) |
@@ -32,6 +34,7 @@ static void reset_session(gba_link_t *l) {
     l->ack_seq = 0;
     l->wake_pending = 0;
     l->wake_delivered = 0;
+    l->wake_only = 0;
     l->transfer_ticks = 0;
     l->transfer_active = 0;
     l->transfer_started_seen = 0;
@@ -71,8 +74,10 @@ static uint16_t make_next_tx(gba_link_t *l) {
         return w;
     }
 
-    if (l->tx_inflight)
-        return make_frame(ELINK_DATA, l->tx_wait_seq, l->tx_wait_value);
+    if (l->tx_inflight) {
+        uint16_t type = (l->tx_wait_value & TX_WAKE_MARK) ? ELINK_WAKE : ELINK_DATA;
+        return make_frame(type, l->tx_wait_seq, l->tx_wait_value);
+    }
 
     if (!l->peer_seen)
         return make_frame(ELINK_HELLO, 0, 1);
@@ -82,7 +87,8 @@ static uint16_t make_next_tx(gba_link_t *l) {
         l->tx_wait_value = queue_peek(l->tx_queue, l->tx_head);
         l->tx_inflight = 1;
         queue_pop(&l->tx_head, &l->tx_len);
-        return make_frame(ELINK_DATA, l->tx_wait_seq, l->tx_wait_value);
+        return make_frame((l->tx_wait_value & TX_WAKE_MARK) ? ELINK_WAKE : ELINK_DATA,
+                          l->tx_wait_seq, l->tx_wait_value);
     }
 
     return make_frame(ELINK_PING, 0, 0);
@@ -107,23 +113,25 @@ static void handle_rx(gba_link_t *l, uint16_t word) {
         break;
 
     case ELINK_DATA:
+    case ELINK_WAKE:
         l->peer_seen = 1;
 
         /*
-         * There is one in-flight DATA per direction, so only the expected
-         * sequence is new. An old sequence is a retransmission; ACK it again.
-         * A future sequence is ignored rather than silently dropping an
-         * earlier packet.
+         * DATA and WAKE share one reliable sequence stream per direction.
+         * WAKE models the long BA91 responder pulse: it wakes the original
+         * ROM but deliberately does not enqueue a link_recv count.
          */
         if (seq == l->rx_expected) {
-            if (!queue_push(l->rx_queue, &l->rx_head, &l->rx_len, value))
+            if (type == ELINK_DATA &&
+                !queue_push(l->rx_queue, &l->rx_head, &l->rx_len, value))
                 break;
 
             l->rx_expected = (uint8_t)((seq + 1) & 0x0F);
             l->wake_pending = 1;
             l->wake_delivered = 0;
+            l->wake_only = (uint8_t)(type == ELINK_WAKE);
         } else if (seq == (uint8_t)((l->rx_expected - 1) & 0x0F)) {
-            /* Duplicate: the original ACK may have been lost. */
+            /* Duplicate: ACK again without re-triggering the emulated wake. */
         } else {
             break;
         }
@@ -341,6 +349,12 @@ int gba_link_send_count(gba_link_t *l, uint8_t count) {
                       (uint8_t)(count & 0x0F));
 }
 
+int gba_link_send_wake(gba_link_t *l) {
+    if (!l->enabled)
+        return 0;
+    return queue_push(l->tx_queue, &l->tx_head, &l->tx_len, TX_WAKE_MARK);
+}
+
 int gba_link_recv_count(gba_link_t *l, uint8_t *count) {
     if (!l->rx_len)
         return 0;
@@ -350,6 +364,7 @@ int gba_link_recv_count(gba_link_t *l, uint8_t *count) {
 
     if (!l->rx_len) {
         l->wake_pending = 0;
+        l->wake_only = 0;
     } else {
         l->wake_pending = 1;
         l->wake_delivered = 0;
@@ -374,6 +389,20 @@ int gba_link_wake_pending(const gba_link_t *l) {
     return l->wake_pending && !l->wake_delivered;
 }
 
+int gba_link_line_low(const gba_link_t *l) {
+    return l->wake_pending != 0;
+}
+
+int gba_link_wake_is_only(const gba_link_t *l) {
+    return l->wake_pending && l->wake_only;
+}
+
 void gba_link_mark_wake_delivered(gba_link_t *l) {
     l->wake_delivered = 1;
+}
+
+void gba_link_release_wake(gba_link_t *l) {
+    l->wake_pending = 0;
+    l->wake_delivered = 0;
+    l->wake_only = 0;
 }

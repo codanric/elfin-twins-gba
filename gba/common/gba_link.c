@@ -79,9 +79,13 @@ void gba_link_service(gba_link_t *l) {
     l->parent = (cnt & GBA_SIO_CHILD) == 0;
 
     /*
-     * First harvest a transfer which finished since the last service tick.
+     * The parent marks its own transfer active when it raises START. A slave
+     * sees that same START/BUSY bit as a read-only level, so latch it here.
      * At 61 us polling this still catches the ~139 us 16-bit wire transfer.
      */
+    if (!l->parent && (cnt & GBA_SIO_START))
+        l->transfer_active = 1;
+
     if (l->transfer_active)
         process_completed(l);
 

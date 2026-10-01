@@ -2,7 +2,7 @@
 """Regression: splb20_run() must dispatch installed PC hooks in its fast path.
 
 The GBA front end intercepts the original Elfin link routines at BE0A, BE41
-and BA91. A previous implementation checked hooks only in splb20_step(), while
+BDB4 and BA91. A previous implementation checked hooks only in splb20_step(), while
 the normal awake splb20_run() path executed instructions directly, making the
 link rewrite unreachable during ordinary play.
 """
@@ -16,7 +16,7 @@ sys.path.insert(0, HERE)
 
 import verify_core
 
-TRAPS = (0xBE0A, 0xBE41, 0xBA91)
+TRAPS = (0xBE0A, 0xBE41, 0xBDB4, 0xBA91)
 
 
 def main():

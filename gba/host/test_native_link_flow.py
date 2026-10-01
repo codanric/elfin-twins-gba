@@ -31,6 +31,7 @@ class NativeLink:
         L.h_native_feed.restype = ctypes.c_int
         L.h_native_run.argtypes = [ctypes.c_void_p, ctypes.c_int32]
         L.h_native_run.restype = ctypes.c_int32
+        L.h_native_hits.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
         L.h_native_enable(a.h)
         L.h_native_enable(b.h)
 
@@ -74,6 +75,11 @@ class NativeLink:
             self.press(p, "right", hold=0.15, after=0.35)
         raise RuntimeError("could not select link icon")
 
+    def hits(self, p):
+        out = (ctypes.c_uint32 * 4)()
+        p.lib.h_native_hits(p.h, out)
+        return tuple(out)
+
 
 def main():
     a, b = load(), load()
@@ -100,18 +106,29 @@ def main():
     # Let the caller's link UI finish its post-handshake redraw before pressing
     # ENTER, exactly as a human must wait for input to become enabled.
     link.ready(a)
+    link.step(1.0)
+    print("PRE ENTER A: PC=%04X B5=%02X BD=%02X B7=%02X B9=%02X BA=%02X key=%02X int=%02X hits=%s" %
+          (a.pc(), a.peek(0xB5), a.peek(0xBD), a.peek(0xB7), a.peek(0xB9),
+           a.peek(0xBA), a.peek(0x9D), a.regs()[9], link.hits(a)))
 
     # ENTER on the default first activity goes through the inline BDB4
     # send-then-receive routine. Both sides should enter mode 0x6x.
     link.press(a, "enter")
+    print("POST ENTER A: PC=%04X B5=%02X BD=%02X B7=%02X B9=%02X BA=%02X key=%02X int=%02X hits=%s" %
+          (a.pc(), a.peek(0xB5), a.peek(0xBD), a.peek(0xB7), a.peek(0xB9),
+           a.peek(0xBA), a.peek(0x9D), a.regs()[9], link.hits(a)))
+    print("POST ENTER B: PC=%04X B5=%02X BD=%02X B7=%02X B9=%02X BA=%02X key=%02X int=%02X hits=%s" %
+          (b.pc(), b.peek(0xB5), b.peek(0xBD), b.peek(0xB7), b.peek(0xB9),
+           b.peek(0xBA), b.peek(0x9D), b.regs()[9], link.hits(b)))
     for _ in range(32):
         link.step(0.25)
         if (a.peek(0xBD) & 0xF0) == 0x60 and (b.peek(0xBD) & 0xF0) == 0x60:
             print("PASS game selection: both units entered mode 0x6x")
             return 0
 
-    print("FAIL game selection: A.B5=%02X B.B5=%02X A.BD=%02X B.BD=%02X" %
-          (a.peek(0xB5), b.peek(0xB5), a.peek(0xBD), b.peek(0xBD)))
+    print("FAIL game selection: A.B5=%02X B.B5=%02X A.BD=%02X B.BD=%02X A.hits=%s B.hits=%s" %
+          (a.peek(0xB5), b.peek(0xB5), a.peek(0xBD), b.peek(0xBD),
+           link.hits(a), link.hits(b)))
     return 1
 
 

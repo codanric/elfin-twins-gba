@@ -285,7 +285,7 @@ static void menu(void) {
         m3_rect(18, 128, 221, 138, C_BOX);
         ui_center(128, C_DIM, line);
         sprintf(line, "link %s  rx %lu  tx %lu",
-                settings.link_mode == LINK_OFF ? "off" : emu_link_ok ? "ready" : "no pull-up seen",
+                settings.link_mode == LINK_OFF ? "off" : emu_link_ok ? "ready" : "not connected",
                 (unsigned long)emu_link_edges_rx, (unsigned long)emu_link_edges_tx);
         m3_rect(18, 139, 221, 149, C_BOX);
         ui_center(139, C_DIM, line);

@@ -1,16 +1,18 @@
 /*
  * Elfin Twins link transport using the GBA multiplayer SIO hardware.
  *
- * The low-level sequencing intentionally follows the proven cable model used
- * by retail GBA titles such as Pokemon Emerald:
+ * The hardware sequencing follows the proven cable model used by retail GBA
+ * titles such as Pokemon Emerald:
  *   - RCNT = 0, multiplayer mode, 115200 bps, SERIAL IRQ enabled
- *   - master is identified from SD/SI terminal bits + multiplayer ID
+ *   - master is elected from SD/SI terminal state + multiplayer ID
+ *   - an explicit multi-transfer handshake stabilizes participant count/roles
  *   - only the hardware master starts transfers
  *   - SERIAL IRQ is the authoritative transfer-completion path
  *   - each transfer carries one already-loaded 16-bit word per GBA
  *
- * Elfin itself only needs a tiny logical transport, so no ACK, retry,
- * sequence-number or polling protocol is layered on top of multiplayer SIO.
+ * Above that bus handshake, Elfin keeps its own tiny protocol. The original
+ * toy's pulse-count messages are carried as DATA words and the responder's
+ * special BA91 low pulse is carried as a WAKE word.
  */
 #ifndef GBA_LINK_H
 #define GBA_LINK_H
@@ -25,9 +27,6 @@
 #define GBA_REG_SIOMLT_SEND  (*(volatile uint16_t *)0x0400012A)
 #define GBA_REG_RCNT         (*(volatile uint16_t *)0x04000134)
 
-/* SIOCNT multiplayer-mode fields. Names match the hardware terminals used by
- * Pokemon Emerald's IsSioMultiMaster()/CheckMasterOrSlave(), rather than
- * treating SI/SD as generic "child"/"ready" flags. */
 #define GBA_SIO_BAUD_115200  0x0003
 #define GBA_SIO_MULTI_SI     0x0004
 #define GBA_SIO_MULTI_SD     0x0008
@@ -37,9 +36,13 @@
 #define GBA_SIO_MULTI        0x2000
 #define GBA_SIO_IRQ          0x4000
 
-/* One 16-bit logical word per completed multiplayer transfer. */
+/* Emerald's proven multiplayer-cable handshake values. */
+#define ELINK_MASTER_HANDSHAKE 0x8FFF
+#define ELINK_SLAVE_HANDSHAKE  0xB9A0
+
+/* One 16-bit logical Elfin event per completed multiplayer transfer. */
 #define ELINK_IDLE           0x0000
-#define ELINK_HELLO          0xE100
+#define ELINK_HELLO          0xE100 /* legacy internal value; no longer used */
 #define ELINK_DATA           0xE200
 #define ELINK_WAKE           0xE300
 #define ELINK_KIND_MASK      0xFF00
@@ -48,13 +51,24 @@
 #define ELINK_QUEUE_SIZE     8
 #define ELINK_TX_WAKE        0x80
 
+enum {
+    ELINK_BUS_OFF = 0,
+    ELINK_BUS_HANDSHAKE,
+    ELINK_BUS_READY
+};
+
 typedef struct {
     uint8_t enabled;
     uint8_t hw_enabled;
-    uint8_t ready;          /* logical peer handshake seen */
-    uint8_t parent;         /* hardware multiplayer master */
+    uint8_t ready;          /* native multiplayer bus handshake completed */
+    uint8_t parent;         /* locked hardware multiplayer master role */
     uint8_t peer_seen;
     uint8_t local_id;
+
+    uint8_t bus_state;
+    uint8_t handshake_count;
+    uint8_t handshake_stable;
+    uint8_t handshake_master;
 
     uint8_t tx_queue[ELINK_QUEUE_SIZE];
     uint8_t tx_head;
@@ -66,10 +80,13 @@ typedef struct {
     uint8_t wake_pending;
     uint8_t wake_delivered;
     uint8_t wake_only;
-
-    /* ROM-hook state lives here so it resets with the cable session. */
-    uint8_t answer_armed;
     uint8_t recv_armed;
+
+    /* ROM-hook send completion tracking. A hook may yield until SERIAL IRQ
+     * confirms that the native word carrying the Elfin event actually ran. */
+    uint8_t hook_tx_active;
+    uint16_t hook_tx_pc;
+    uint32_t hook_tx_goal;
 
     /* Word currently preloaded in SIOMLT_SEND and diagnostics. */
     uint16_t tx_word;
@@ -85,7 +102,8 @@ typedef struct {
 void gba_link_init(gba_link_t *l);
 void gba_link_set_enabled(gba_link_t *l, int enabled);
 
-/* Called by the master pacing timer. Non-masters never set SIO_START. */
+/* Called once per VBlank. During handshake this elects the Emerald-style
+ * master; after handshake the locked master offers one transfer per frame. */
 void gba_link_service(gba_link_t *l);
 
 /* Called directly from the GBA SERIAL IRQ after a multiplayer transfer. */

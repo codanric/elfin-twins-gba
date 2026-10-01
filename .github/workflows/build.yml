@@ -18,6 +18,9 @@ jobs:
       - name: Test SPLB20 link hook dispatch
         run: python3 gba/host/test_pc_hook_fastpath.py
 
+      - name: Test Elfin logical link flow
+        run: python3 gba/host/test_native_link_flow.py
+
       - name: Build with devkitARM
         run: |
           docker run --rm \

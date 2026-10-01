@@ -237,16 +237,23 @@ void emu_start(void) {
     REG_TM2CNT_H = 0;
     REG_TM2CNT_L = (u16)(65536 - (16777216 / EMU_IRQ_HZ));
     irq_add(II_TIMER2, emu_isr);
-    irq_add(II_SERIAL, gba_link_irq_handler);
+
+    /* Link supervisor: 16,384 Hz = one tick every 61.035 us. */
+    REG_TM0CNT_H = 0;
+    REG_TM0CNT_L = 0xFFFF;
+    irq_add(II_TIMER0, gba_link_timer_isr);
+    REG_TM0CNT_H = TM_ENABLE | TM_FREQ_1024 | TM_IRQ;
+
     REG_TM2CNT_H = TM_ENABLE | TM_IRQ;
 }
 
 void emu_stop(void) {
     REG_TM2CNT_H = 0;
     REG_TM3CNT_H = 0;
+    REG_TM0CNT_H = 0;
     irq_delete(II_TIMER2);
-    irq_delete(II_SERIAL);
+    irq_delete(II_TIMER0);
 }
 
 void emu_isr(void) __attribute__((long_call));
-void gba_link_irq_handler(void) __attribute__((long_call));
+void gba_link_timer_isr(void) __attribute__((long_call));

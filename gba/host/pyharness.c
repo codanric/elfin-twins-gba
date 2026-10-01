@@ -41,15 +41,23 @@ int32_t h_run(harness_t *h, int32_t budget_fp) { return splb20_run(&h->cpu, budg
  * executing through its optimized awake loop.
  */
 static int h_test_hook_hits;
+static int h_test_hook_action = SPLB20_HOOK_CONSUME;
 static int h_test_pc_hook(splb20_t *c, uint16_t pc, void *user) {
     (void)c;
     (void)pc;
     (void)user;
     ++h_test_hook_hits;
-    return SPLB20_HOOK_CONSUME;
+    return h_test_hook_action;
 }
 void h_test_hook_arm(harness_t *h, int pc) {
     h_test_hook_hits = 0;
+    h_test_hook_action = SPLB20_HOOK_CONSUME;
+    h->cpu.pc = (uint16_t)pc;
+    splb20_set_pc_hook(&h->cpu, h_test_pc_hook, NULL);
+}
+void h_test_hook_arm_wait(harness_t *h, int pc) {
+    h_test_hook_hits = 0;
+    h_test_hook_action = SPLB20_HOOK_WAIT;
     h->cpu.pc = (uint16_t)pc;
     splb20_set_pc_hook(&h->cpu, h_test_pc_hook, NULL);
 }

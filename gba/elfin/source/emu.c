@@ -80,6 +80,7 @@ void emu_sound_update(void) {
  */
 #define LINK_ROM_SEND      0xBE0A
 #define LINK_ROM_RECV      0xBE41
+#define LINK_ROM_EXCHANGE  0xBDB4
 #define LINK_ROM_ANSWER    0xBA91
 #define LINK_RAM_TMPCOUNT  0xAE
 #define LINK_RAM_EDGES     0xB4
@@ -110,6 +111,31 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
         return SPLB20_HOOK_CONSUME;
     }
 
+    if (pc == LINK_ROM_EXCHANGE) {
+        /*
+         * BDB4 duplicates link_send inline and then executes JSR link_recv at
+         * BDEC. It is used by the game-selection path, so bypass only the wire
+         * send portion and resume at the real receive call. Keeping the
+         * caller's JSR frame intact lets the ROM perform its own post-receive
+         * validation and RTS.
+         */
+        uint8_t n = splb20_read(c, LINK_RAM_TMPCOUNT);
+        uint8_t edges = n ? (uint8_t)(n - 1) : 0;
+        uint8_t flags_b8;
+
+        if (!gba_link_send_count(l, edges))
+            return SPLB20_HOOK_WAIT;
+        ++emu_link_hook_send;
+
+        splb20_write(c, LINK_RAM_TMPCOUNT, 0);
+        flags_b8 = splb20_read(c, 0xB8);
+        splb20_write(c, 0xB8, (uint8_t)(flags_b8 & 0xF7));
+        splb20_write(c, LINK_PA_DIR, 0x3F);
+        splb20_write(c, LINK_PA_DATA, 0xFF);
+        c->pc = 0xBDEC;
+        return SPLB20_HOOK_CONSUME;
+    }
+
     if (pc == LINK_ROM_RECV) {
         uint8_t edges;
 
@@ -134,6 +160,7 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
         splb20_write(c, LINK_RAM_EDGES, edges);
         c->in_low &= (uint8_t)~LINK_PA5;
         c->in_high |= LINK_PA5;
+        splb20_write(c, LINK_INT_CFG, 0x85);
         l->recv_armed = 0;
         splb20_return_from_subroutine(c);
         return SPLB20_HOOK_CONSUME;

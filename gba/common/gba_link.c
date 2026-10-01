@@ -22,6 +22,7 @@ static int decode_frame(uint16_t w, uint16_t *type, uint8_t *seq, uint8_t *value
 
 static void reset_session(gba_link_t *l) {
     l->peer_seen = 0;
+    l->answer_armed = 0;
     l->tx_seq = 0;
     l->tx_inflight = 0;
     l->tx_wait_seq = 0;
@@ -61,8 +62,15 @@ static void queue_pop(uint8_t *head, uint8_t *len) {
 }
 
 static uint16_t make_next_tx(gba_link_t *l) {
-    if (l->ack_pending)
-        return make_frame(ELINK_ACK, l->ack_seq, 0);
+    if (l->ack_pending) {
+        uint16_t w = make_frame(ELINK_ACK, l->ack_seq, 0);
+        /*
+         * ACKs are retransmitted when the peer retransmits DATA, so one
+         * completed transfer is enough to clear the pending flag.
+         */
+        l->ack_pending = 0;
+        return w;
+    }
 
     if (l->tx_inflight)
         return make_frame(ELINK_DATA, l->tx_wait_seq, l->tx_wait_value);
@@ -265,9 +273,14 @@ void gba_link_service(gba_link_t *l) {
 }
 
 int gba_link_send_count(gba_link_t *l, uint8_t count) {
-    if (!l->enabled || !l->ready)
-        return 1; /* No peer: let the original game time out normally. */
+    if (!l->enabled)
+        return 0;
 
+    /*
+     * Queue before the cable reaches READY. This is important because the
+     * original Elfin caller emits its wake/message before the peer has had a
+     * chance to finish joining the GBA bus.
+     */
     return queue_push(l->tx_queue, &l->tx_head, &l->tx_len,
                       (uint8_t)(count & 0x0F));
 }

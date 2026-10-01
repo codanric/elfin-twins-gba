@@ -47,18 +47,16 @@ jobs:
             https://s3.amazonaws.com/mgba/mGBA-build-latest-appimage-x64.appimage \
             -o /tmp/mgba.appimage
           chmod +x /tmp/mgba.appimage
-          (cd /tmp && ./mgba.appimage --appimage-extract >/dev/null)
-          MGBA_QT=/tmp/squashfs-root/usr/bin/mgba-qt
-          if [ ! -x "$MGBA_QT" ]; then
-            MGBA_QT=$(find /tmp/squashfs-root -type f -name 'mgba-qt' -perm -111 | head -1)
-          fi
-          test -x "$MGBA_QT"
+          MGBA_QT=/tmp/mgba.appimage
 
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends \
             xvfb openbox xdotool libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0
 
-          "$MGBA_QT" --version | tee /tmp/mgba-version.txt
+          # Avoid the AppImage self-extraction path, which can hang on hosted
+          # runners. The runtime's extract-and-run mode needs no FUSE mount.
+          timeout 30s "$MGBA_QT" --appimage-extract-and-run --version \
+            | tee /tmp/mgba-version.txt
 
           # Use the exact same ROM path twice: this is the multi-ROM launch
           # form already proven to create two mGBA multiplayer windows. Each
@@ -82,7 +80,7 @@ jobs:
           trap cleanup EXIT
           sleep 1
 
-          "$MGBA_QT" \
+          "$MGBA_QT" --appimage-extract-and-run \
             "$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.gba" \
             "$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.gba" \
             >/tmp/mgba-ui.log 2>&1 &

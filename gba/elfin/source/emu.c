@@ -16,6 +16,16 @@ volatile uint8_t emu_sound_on = 1;
 volatile uint8_t emu_link_mode = LINK_ON_SD;
 volatile uint32_t emu_link_edges_rx;
 volatile uint32_t emu_link_edges_tx;
+volatile uint32_t emu_link_hook_send;
+volatile uint32_t emu_link_hook_recv;
+volatile uint32_t emu_link_hook_answer;
+volatile uint32_t emu_link_sio_errors;
+volatile uint16_t emu_link_sio;
+volatile uint16_t emu_link_last_rx;
+volatile uint16_t emu_link_last_tx;
+volatile uint8_t emu_link_parent;
+volatile uint8_t emu_link_bus_ready;
+volatile uint8_t emu_link_peer_seen;
 
 static uint8_t applied_buttons;
 static gba_link_t cable_link;
@@ -88,6 +98,7 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
 
         if (!gba_link_send_count(l, edges))
             return SPLB20_HOOK_WAIT;
+        ++emu_link_hook_send;
 
         /* link_send leaves these values after releasing PA5. */
         splb20_write(c, LINK_RAM_TMPCOUNT, 0);
@@ -118,6 +129,7 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
 
         if (!gba_link_recv_count(l, &edges))
             return SPLB20_HOOK_WAIT;
+        ++emu_link_hook_recv;
 
         splb20_write(c, LINK_RAM_EDGES, edges);
         c->in_low &= (uint8_t)~LINK_PA5;
@@ -135,6 +147,7 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
         else if (!l->answer_armed) {
             if (!gba_link_send_count(l, 1))
                 return SPLB20_HOOK_WAIT;
+            ++emu_link_hook_answer;
             l->answer_armed = 1;
         }
         return SPLB20_HOOK_NONE; /* still execute BA91 */
@@ -203,6 +216,13 @@ void emu_isr(void) {
     emu_link_edges_rx = cable_link.frames_rx;
     emu_link_edges_tx = cable_link.frames_tx;
     emu_link_ok = gba_link_is_ready(&cable_link);
+    emu_link_sio_errors = cable_link.sio_errors;
+    emu_link_sio = cable_link.last_sio;
+    emu_link_last_rx = cable_link.last_rx_word;
+    emu_link_last_tx = cable_link.last_tx_word;
+    emu_link_parent = cable_link.parent;
+    emu_link_bus_ready = cable_link.ready;
+    emu_link_peer_seen = cable_link.peer_seen;
 
     if (cpu.snd_changed)
         emu_sound_update();
@@ -223,6 +243,16 @@ void emu_init(void) {
     gba_link_set_enabled(&cable_link, emu_link_mode != LINK_OFF);
     splb20_set_pc_hook(&cpu, emu_link_pc_hook, &cable_link);
     emu_link_ok = 0;
+    emu_link_hook_send = 0;
+    emu_link_hook_recv = 0;
+    emu_link_hook_answer = 0;
+    emu_link_sio_errors = 0;
+    emu_link_sio = 0;
+    emu_link_last_rx = 0;
+    emu_link_last_tx = 0;
+    emu_link_parent = 0;
+    emu_link_bus_ready = 0;
+    emu_link_peer_seen = 0;
 }
 
 void emu_start(void) {

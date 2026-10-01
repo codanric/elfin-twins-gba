@@ -16,7 +16,7 @@ sys.path.insert(0, HERE)
 
 import verify_core
 
-TRAPS = (0xBE0A, 0xBE41, 0xBDB4, 0xBA91)
+TRAPS = (0xBE0D, 0xBE41, 0xBDB7, 0xBA99)
 
 
 def main():

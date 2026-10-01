@@ -54,7 +54,7 @@ static void try_send(uint8_t edges) {
 int main(void) {
     REG_WAITCNT = 0x4317;
 
-    irq_init(NULL);
+    irq_init((fnptr)isr_master_nest);
     irq_add(II_VBLANK, NULL);
 
     REG_DISPCNT = DCNT_MODE0 | DCNT_BG0;
@@ -64,11 +64,11 @@ int main(void) {
     gba_link_init(&link);
     gba_link_set_enabled(&link, 1);
 
-    /* 16,384 Hz link service timer. */
+    /* Parent pacing timer; transfer completion is caught by SERIAL IRQ. */
     REG_TM0CNT_H = 0;
-    REG_TM0CNT_L = 0xFFFF;
+    REG_TM0CNT_L = (u16)(65536 - 50);
     irq_add(II_TIMER0, link_isr);
-    REG_TM0CNT_H = TM_ENABLE | TM_FREQ_1024 | TM_IRQ;
+    irq_set(II_SERIAL, link_isr, ISR_PRIO(0) | ISR_REPLACE);
 
     rtc_result = rtc_init();
     rtc_time_t t0;

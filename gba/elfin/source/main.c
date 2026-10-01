@@ -19,7 +19,6 @@
 #include "elfin_catchup.h"
 #include "emu.h"
 #include "lcd.h"
-#include "linkio.h"
 #include "rtc.h"
 #include "save.h"
 
@@ -81,6 +80,11 @@ static void save_now(void) {
     u16 ime = REG_IME;
     REG_IME = 0;
     memcpy(&snap, &cpu, sizeof(cpu));
+    /* Runtime bindings are restored by save_load(); never serialize code or
+     * object addresses into a portable machine-state snapshot. */
+    snap.rom = NULL;
+    snap.pc_hook = NULL;
+    snap.pc_hook_user = NULL;
     REG_IME = ime;
     save_write(&snap, &settings, rtc_now());
 }
@@ -188,7 +192,7 @@ static void edit_rtc(void) {
 
 enum { M_RESUME, M_SOUND, M_LINK, M_AWAY, M_SYNC, M_BLUR, M_SETRTC, M_SAVE, M_RESET, M_COUNT };
 
-static const char *link_names[] = {"off", "SD wire", "SC wire"};
+static const char *link_names[] = {"off", "GBA cable", "GBA cable"};
 static const char *away_names[] = {"real time", "max 1 day", "paused"};
 
 static int confirm(const char *q) {
@@ -207,6 +211,7 @@ static void menu(void) {
     int sel = 0;
     char line[48];
     int dirty = 1;
+    int link_diag = 0;
     uint32_t tick = 0;
     save_now();
     for (;;) {
@@ -215,6 +220,7 @@ static void menu(void) {
         tick++;
         if (key_hit(KEY_UP)) { sel = (sel + M_COUNT - 1) % M_COUNT; dirty = 1; }
         if (key_hit(KEY_DOWN)) { sel = (sel + 1) % M_COUNT; dirty = 1; }
+        if (key_hit(KEY_SELECT)) { link_diag ^= 1; dirty = 1; }
         int dir = key_hit(KEY_RIGHT) ? 1 : key_hit(KEY_LEFT) ? -1 : 0;
         int act = key_hit(KEY_A);
         if (key_hit(KEY_B) || key_hit(KEY_START))
@@ -274,21 +280,38 @@ static void menu(void) {
         }
         if (tick % 30)
             continue;
-        rtc_time_t t;
-        if (rtc_present() && rtc_get(&t) == 0)
-            sprintf(line, "RTC %04u-%02u-%02u %02u:%02u:%02u   pet %02u:%02u",
-                    t.year, t.month, t.day, t.hour, t.minute, t.second,
-                    cpu.ram[ELFIN_CLK_HOUR - 0x80], cpu.ram[ELFIN_CLK_MINUTE - 0x80]);
-        else
-            sprintf(line, "no cartridge RTC   pet %02u:%02u",
-                    cpu.ram[ELFIN_CLK_HOUR - 0x80], cpu.ram[ELFIN_CLK_MINUTE - 0x80]);
         m3_rect(18, 128, 221, 138, C_BOX);
-        ui_center(128, C_DIM, line);
-        sprintf(line, "link %s  rx %lu  tx %lu",
-                settings.link_mode == LINK_OFF ? "off" : emu_link_ok ? "ready" : "no pull-up seen",
-                (unsigned long)emu_link_edges_rx, (unsigned long)emu_link_edges_tx);
         m3_rect(18, 139, 221, 149, C_BOX);
-        ui_center(139, C_DIM, line);
+        if (!link_diag) {
+            rtc_time_t t;
+            if (rtc_present() && rtc_get(&t) == 0)
+                sprintf(line, "RTC %04u-%02u-%02u %02u:%02u:%02u   pet %02u:%02u",
+                        t.year, t.month, t.day, t.hour, t.minute, t.second,
+                        cpu.ram[ELFIN_CLK_HOUR - 0x80], cpu.ram[ELFIN_CLK_MINUTE - 0x80]);
+            else
+                sprintf(line, "no cartridge RTC   pet %02u:%02u",
+                        cpu.ram[ELFIN_CLK_HOUR - 0x80], cpu.ram[ELFIN_CLK_MINUTE - 0x80]);
+            ui_center(128, C_DIM, line);
+            sprintf(line, "link %s  rx %lu tx %lu",
+                    settings.link_mode == LINK_OFF ? "off" :
+                    emu_link_ok ? "ready" : "not connected",
+                    (unsigned long)emu_link_edges_rx,
+                    (unsigned long)emu_link_edges_tx);
+            ui_center(139, C_DIM, line);
+        } else {
+            sprintf(line, "SIO %04X %c bus:%u peer:%u err:%lu",
+                    emu_link_sio, emu_link_parent ? 'P' : 'C',
+                    emu_link_bus_ready, emu_link_peer_seen,
+                    (unsigned long)emu_link_sio_errors);
+            ui_center(128, C_DIM, line);
+            sprintf(line, "H %lu/%lu/%lu/%lu W %04X/%04X",
+                    (unsigned long)emu_link_hook_send,
+                    (unsigned long)emu_link_hook_recv,
+                    (unsigned long)emu_link_hook_exchange,
+                    (unsigned long)emu_link_hook_answer,
+                    emu_link_last_rx, emu_link_last_tx);
+            ui_center(139, C_DIM, line);
+        }
     }
 done:
     save_now();
@@ -300,7 +323,7 @@ done:
 int main(void) {
     REG_WAITCNT = 0x4317;   /* ROM 3/1 wait states + prefetch */
 
-    irq_init(NULL);
+    irq_init((fnptr)isr_master_nest);
     irq_add(II_VBLANK, NULL);
     REG_DISPCNT = DCNT_MODE3 | DCNT_BG2;
     tte_init_bmp(3, &verdana9Font, NULL);
@@ -341,6 +364,7 @@ int main(void) {
     int dirty = 0;
     for (;;) {
         VBlankIntrWait();
+        emu_link_vsync();
         frame++;
         key_poll();
 

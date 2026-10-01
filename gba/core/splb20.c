@@ -370,8 +370,21 @@ void splb20_init(splb20_t *c, const uint8_t *rom, uint32_t rom_size,
     c->snd_tc_div = 1;
     c->snd_clock_div = 1;
     c->timer_warp = 1;
+    c->pc_hook = 0;
+    c->pc_hook_user = 0;
     scan_loops(c);
     splb20_reset(c);
+}
+
+void splb20_set_pc_hook(splb20_t *c, splb20_pc_hook_t hook, void *user) {
+    c->pc_hook = hook;
+    c->pc_hook_user = user;
+}
+
+void splb20_return_from_subroutine(splb20_t *c) {
+    uint16_t ret = pull(c);
+    ret |= (uint16_t)pull(c) << 8;
+    c->pc = (uint16_t)(ret + 1);
 }
 
 void splb20_reset(splb20_t *c) {
@@ -684,6 +697,22 @@ static inline __attribute__((always_inline)) int execute(splb20_t *c, uint8_t op
 
 int32_t SPLB20_FAST splb20_step(splb20_t *c) {
     int32_t exec = MCLOCK_DIV_FP;
+
+    /*
+     * A hardware-backed subroutine can be consumed without executing the
+     * original timing-sensitive implementation. This is used only for the
+     * Elfin PA5 link routines on GBA; the host core leaves the hook unset.
+     */
+    if (c->rosc_enbl && c->cpu_enbl && c->pc_hook) {
+        int action = c->pc_hook(c, c->pc, c->pc_hook_user);
+        if (action == SPLB20_HOOK_CONSUME || action == SPLB20_HOOK_WAIT) {
+            int cycles = action == SPLB20_HOOK_WAIT ? 8 : 6;
+            exec = cycles << SPLB20_FP;
+            timers_clock(c, exec);
+            c->io_written = 0;
+            return exec;
+        }
+    }
     if (c->rosc_enbl) {
         if (c->cpu_enbl) {
             uint8_t opcode = rom_byte(c, c->pc);
@@ -739,16 +768,52 @@ static int32_t next_event(const splb20_t *c) {
     return n;
 }
 
+/*
+ * The PC hook is currently used by the GBA front end for the Elfin
+ * link entry points. splb20_run() normally executes awake code through its
+ * batched fast path, bypassing splb20_step(); stop at these PCs so the hook
+ * is guaranteed to run before the intercepted ROM instruction executes.
+ *
+ * Keep this test tiny: it runs once per fast-path instruction and avoids
+ * disabling batching for the whole game merely because a hook is installed.
+ */
+static inline __attribute__((always_inline)) int pc_hook_trap(const splb20_t *c) {
+    if (!c->pc_hook)
+        return 0;
+    return c->pc == 0xBE0D || c->pc == 0xBE41 ||
+           c->pc == 0xBDB7 || c->pc == 0xBA99;
+}
+
 int32_t SPLB20_FAST splb20_run(splb20_t *c, int32_t budget_fp) {
     int32_t done = 0;
     while (done < budget_fp) {
-        if (!c->rosc_enbl || !c->cpu_enbl || c->timer_warp != 1 || c->prescalar > 20) {
+        if (!c->rosc_enbl || !c->cpu_enbl || c->timer_warp != 1 ||
+            c->prescalar > 20 || pc_hook_trap(c)) {
             int32_t skipped = sleep_skip(c, budget_fp - done);
             if (skipped) {
                 done += skipped;
                 continue;
             }
+
+            /*
+             * A hardware-backed hook may need to wait for an event that can
+             * only be delivered by another GBA interrupt (SERIAL/VBlank).
+             * If the hook leaves PC parked on the same trap address, return
+             * the partial slice instead of burning the entire emulation
+             * budget in repeated 8-cycle WAIT pseudo-instructions. The caller
+             * keeps the unspent emulated time as owed_fp and retries after
+             * the GBA IRQ dispatcher has had a chance to run.
+             *
+             * This is critical when the Elfin caller is also the native GBA
+             * multiplayer master: link_recv waits for the responder ACK, but
+             * that ACK cannot cross the bus until VBlank starts the next
+             * master transfer.
+             */
+            uint16_t hook_pc = c->pc;
+            int trapped = pc_hook_trap(c);
             done += splb20_step(c);
+            if (trapped && c->pc == hook_pc && pc_hook_trap(c))
+                break;
             continue;
         }
         /* Awake: execute instructions and apply the timers in one batch,
@@ -759,6 +824,14 @@ int32_t SPLB20_FAST splb20_run(splb20_t *c, int32_t budget_fp) {
         c->pending_fp = 0;
         c->io_written = 0;
         for (;;) {
+            /*
+             * A branch/JSR in this batch may have just reached a hardware
+             * hook. Flush the cycles already accumulated in this batch, then
+             * let the next outer iteration dispatch it through splb20_step().
+             */
+            if (pc_hook_trap(c))
+                break;
+
             uint8_t opcode = rom_byte(c, c->pc);
             if ((opcode == 0x85 || opcode == 0xA5) &&
                 (loop_hint[c->pc >> 3] >> (c->pc & 7) & 1)) {

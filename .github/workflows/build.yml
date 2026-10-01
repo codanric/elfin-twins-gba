@@ -1,0 +1,214 @@
+name: Build GBA ROMs
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  # Include the checked-out commit so a wedged emulator job cannot block a
+  # newer diagnostic run. Stale runs can finish independently.
+  group: gba-native-link-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test SPLB20 link hook dispatch
+        run: python3 gba/host/test_pc_hook_fastpath.py
+
+      - name: Test Elfin logical link flow
+        run: python3 gba/host/test_native_link_flow.py
+
+      - name: Test native link transport
+        run: |
+          gcc -O2 -Wall -Wextra -std=gnu11 \
+            gba/host/test_gba_link_protocol.c gba/common/gba_link.c \
+            -o /tmp/test_gba_link_protocol
+          /tmp/test_gba_link_protocol
+
+      - name: Build with devkitARM
+        run: |
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/work" \
+            -w /work \
+            devkitpro/devkitarm:latest \
+            /bin/bash -lc 'make -C gba/elfin && make -C gba/linktest'
+
+      - name: Test two real ROM instances in mGBA multiplayer
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+
+          curl -fL --retry 3 \
+            https://s3.amazonaws.com/mgba/mGBA-build-latest-appimage-x64.appimage \
+            -o /tmp/mgba.appimage
+          chmod +x /tmp/mgba.appimage
+          MGBA_QT=/tmp/mgba.appimage
+
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            xvfb openbox xdotool libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0
+
+          # Avoid the AppImage self-extraction path, which can hang on hosted
+          # runners. The runtime's extract-and-run mode needs no FUSE mount.
+          timeout 30s "$MGBA_QT" --appimage-extract-and-run --version \
+            | tee /tmp/mgba-version.txt
+
+          # Use the exact same ROM path twice: this is the multi-ROM launch
+          # form already proven to create two mGBA multiplayer windows. Each
+          # hardware player writes its probe to a different SRAM offset.
+          SAVE="$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.sav"
+          rm -f "$SAVE" /tmp/mgba-ui.log /tmp/mgba-windows.txt
+
+          Xvfb :99 -screen 0 1280x720x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
+          xpid=$!
+          export DISPLAY=:99
+          openbox >/tmp/openbox.log 2>&1 &
+          obpid=$!
+          mpid=
+          cleanup() {
+            if [ -n "${mpid:-}" ]; then kill "$mpid" 2>/dev/null || true; fi
+            kill "$obpid" "$xpid" 2>/dev/null || true
+            wait "$mpid" 2>/dev/null || true
+            wait "$obpid" 2>/dev/null || true
+            wait "$xpid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          sleep 1
+
+          "$MGBA_QT" --appimage-extract-and-run \
+            "$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.gba" \
+            "$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.gba" \
+            >/tmp/mgba-ui.log 2>&1 &
+          mpid=$!
+
+          # Wait until both emulator windows exist.
+          for i in $(seq 1 120); do
+            mapfile -t wins < <(xdotool search --onlyvisible --name "mGBA" 2>/dev/null || true)
+            if [ "${#wins[@]}" -ge 2 ]; then break; fi
+            if ! kill -0 "$mpid" 2>/dev/null; then
+              cat /tmp/mgba-ui.log
+              exit 1
+            fi
+            sleep 0.1
+          done
+          mapfile -t wins < <(xdotool search --onlyvisible --name "mGBA" 2>/dev/null || true)
+          printf "window_count=%d\n" "${#wins[@]}" | tee /tmp/mgba-windows.txt
+          [ "${#wins[@]}" -ge 2 ]
+
+          # Allow HELLO transfers to settle, then press GBA A (default X key)
+          # on both consoles. Each ROM queues Elfin DATA value 10.
+          sleep 2
+          for w in "${wins[@]:0:2}"; do
+            xdotool keydown --window "$w" x
+            sleep 0.15
+            xdotool keyup --window "$w" x
+          done
+
+          # Both cores map the same SRAM file MAP_SHARED. Wait until the ROMs
+          # have created it, then allow several more VBlanks for DATA delivery.
+          for i in $(seq 1 80); do
+            if [ -s "$SAVE" ]; then break; fi
+            sleep 0.1
+          done
+          sleep 2
+          test -s "$SAVE"
+
+          python3 - "$SAVE" <<'PY' | tee /tmp/mgba-probe.txt
+          from pathlib import Path
+          import sys
+
+          def u16(b, o):
+              return b[o] | (b[o+1] << 8)
+
+          def u32(b, o):
+              return u16(b, o) | (u16(b, o+2) << 16)
+
+          def parse_slot(b, base):
+              r = b[base:base + 36]
+              assert len(r) == 36, (base, len(r))
+              assert r[:4] == b'ELNK', (base, r[:8].hex())
+              assert r[4] == 1, (base, r[4])
+              return {
+                  'slot': base // 64,
+                  'id': r[5],
+                  'parent': r[6],
+                  'ready': r[7],
+                  'peer': r[8],
+                  'app_last': r[9],
+                  'frames_rx': u32(r, 12),
+                  'frames_tx': u32(r, 16),
+                  'sio_errors': u32(r, 20),
+                  'app_rx': u32(r, 24),
+                  'last_rx': u16(r, 28),
+                  'last_tx': u16(r, 30),
+                  'sio': u16(r, 32),
+                  'serial_irqs': u16(r, 34),
+              }
+
+          path = sys.argv[1]
+          b = Path(path).read_bytes()
+          assert len(b) >= 100, (path, len(b))
+          raw = [parse_slot(b, 0), parse_slot(b, 64)]
+          reports = {r['id']: r for r in raw}
+
+          for r in raw:
+              print(
+                  f"slot={r['slot']} id={r['id']} parent={r['parent']} "
+                  f"ready={r['ready']} peer={r['peer']} "
+                  f"rx={r['frames_rx']} tx={r['frames_tx']} "
+                  f"app_rx={r['app_rx']} app_last={r['app_last']} "
+                  f"errors={r['sio_errors']} sio={r['sio']:04X} "
+                  f"last={r['last_rx']:04X}/{r['last_tx']:04X} "
+                  f"serial_irqs={r['serial_irqs']}"
+              )
+
+          assert set(reports) == {0, 1}, reports
+          p0, p1 = reports[0], reports[1]
+
+          # Emerald hardware role rule: player 0 is master, player 1 is child.
+          assert p0['parent'] == 1 and p1['parent'] == 0, reports
+          assert p0['ready'] == p1['ready'] == 1, reports
+          assert p0['peer'] == p1['peer'] == 1, reports
+          assert p0['sio_errors'] == p1['sio_errors'] == 0, reports
+          assert p0['serial_irqs'] > 0 and p1['serial_irqs'] > 0, reports
+
+          # Both windows received A, so each must transmit DATA 10 and each
+          # peer must consume DATA 10 inside the actual GBA ROM.
+          for r in (p0, p1):
+              assert r['frames_tx'] >= 1, reports
+              assert r['frames_rx'] >= 1, reports
+              assert r['app_rx'] >= 1, reports
+              assert r['app_last'] == 10, reports
+
+          print("PASS: mGBA multiplayer moved Elfin DATA 10 both directions")
+          PY
+
+          cat /tmp/mgba-ui.log || true
+
+      - name: Upload mGBA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mgba-multiplayer-evidence
+          if-no-files-found: warn
+          path: |
+            /tmp/mgba-version.txt
+            /tmp/mgba-ui.log
+            /tmp/mgba-windows.txt
+            /tmp/mgba-probe.txt
+            gba/linktest/elfin-linktest.sav
+            /tmp/openbox.log
+            /tmp/xvfb.log
+
+      - name: Upload ROMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: elfin-twins-gba-native-link
+          path: |
+            gba/elfin/elfin-twins.gba
+            gba/linktest/elfin-linktest.gba

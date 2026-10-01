@@ -39,7 +39,20 @@
 #define SPLB20_SYS_CPU_STOP     0x40
 #define SPLB20_SYS_ROSC_STOP    0x80
 
-typedef struct splb20 {
+typedef struct splb20 splb20_t;
+
+/* Optional host-side hooks for hardware-backed subroutines. */
+typedef int (*splb20_pc_hook_t)(struct splb20 *c, uint16_t pc, void *user);
+
+/* Hook return values. OBSERVE means execute the original instruction normally. */
+enum {
+    SPLB20_HOOK_NONE = 0,
+    SPLB20_HOOK_CONSUME = 1,
+    SPLB20_HOOK_WAIT = 2,
+    SPLB20_HOOK_OBSERVE = 3
+};
+
+struct splb20 {
     /* registers */
     uint16_t pc;
     uint8_t a, x, y, sp;
@@ -92,6 +105,9 @@ typedef struct splb20 {
     int32_t pending_fp;
     uint8_t io_written;
 
+    splb20_pc_hook_t pc_hook;
+    void *pc_hook_user;
+
     /* Optional hook: time multiplier for the 2 Hz / 128 Hz / counter timers.
      * 1 = real time. Used for RTC catch-up (fast-forward of pet time). */
     int32_t timer_warp;
@@ -99,7 +115,7 @@ typedef struct splb20 {
     const uint8_t *rom;
     uint32_t rom_mask;
     uint32_t rom_offset;
-} splb20_t;
+};
 
 /* On the GBA the core lives in IWRAM; callers in ROM need long calls. */
 #if defined(__GBA__)
@@ -115,6 +131,10 @@ extern "C" {
 SPLB20_API void splb20_init(splb20_t *c, const uint8_t *rom, uint32_t rom_size,
                  uint32_t clock_hz, int non_crystal, uint8_t pullup_ext);
 SPLB20_API void splb20_reset(splb20_t *c);
+SPLB20_API void splb20_set_pc_hook(splb20_t *c, splb20_pc_hook_t hook, void *user);
+
+/* Complete a JSR as if the intercepted subroutine executed RTS. */
+SPLB20_API void splb20_return_from_subroutine(splb20_t *c);
 
 /* Execute one Python-core "clock()" call. Returns elapsed cycles in fp8. */
 SPLB20_API int32_t splb20_step(splb20_t *c);

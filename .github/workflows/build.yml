@@ -95,7 +95,7 @@ jobs:
             sleep 0.1
           done
 
-          xwininfo -root -tree > /tmp/mgba-windows.txt
+          : > /tmp/mgba-windows.txt
           mapfile -t wins < <(xdotool search --onlyvisible --name "mGBA" 2>/dev/null || true)
           printf "window_count=%d\n" "${#wins[@]}" >> /tmp/mgba-windows.txt
           [ "${#wins[@]}" -ge 2 ]

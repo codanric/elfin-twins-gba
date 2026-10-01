@@ -129,6 +129,10 @@ int main(void) {
     /* Emerald-style: VBlank offers transfers; SERIAL owns completion. */
     irq_set(II_SERIAL, link_serial_isr, ISR_PRIO(0) | ISR_REPLACE);
 
+    /* Boot marker: this must grow the SRAM file even before the first VBlank,
+     * so emulator CI can distinguish "ROM never ran" from "link failed". */
+    write_probe_record();
+
     for (;;) {
         VBlankIntrWait();
         ++vsync_services;

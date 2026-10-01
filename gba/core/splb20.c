@@ -794,7 +794,26 @@ int32_t SPLB20_FAST splb20_run(splb20_t *c, int32_t budget_fp) {
                 done += skipped;
                 continue;
             }
+
+            /*
+             * A hardware-backed hook may need to wait for an event that can
+             * only be delivered by another GBA interrupt (SERIAL/VBlank).
+             * If the hook leaves PC parked on the same trap address, return
+             * the partial slice instead of burning the entire emulation
+             * budget in repeated 8-cycle WAIT pseudo-instructions. The caller
+             * keeps the unspent emulated time as owed_fp and retries after
+             * the GBA IRQ dispatcher has had a chance to run.
+             *
+             * This is critical when the Elfin caller is also the native GBA
+             * multiplayer master: link_recv waits for the responder ACK, but
+             * that ACK cannot cross the bus until VBlank starts the next
+             * master transfer.
+             */
+            uint16_t hook_pc = c->pc;
+            int trapped = pc_hook_trap(c);
             done += splb20_step(c);
+            if (trapped && c->pc == hook_pc && pc_hook_trap(c))
+                break;
             continue;
         }
         /* Awake: execute instructions and apply the timers in one batch,

@@ -37,6 +37,7 @@ static void reset_session(gba_link_t *l) {
     l->transfer_ticks = 0;
     l->transfer_active = 0;
     l->transfer_started_seen = 0;
+    l->slave_word_loaded = 0;
     l->last_rx_word = 0;
     l->last_tx_word = 0;
     l->last_sio = 0;
@@ -155,6 +156,16 @@ static void handle_rx(gba_link_t *l, uint16_t word) {
     }
 }
 
+static void slave_preload(gba_link_t *l) {
+    if (l->parent || l->slave_word_loaded)
+        return;
+
+    uint16_t next = make_next_tx(l);
+    GBA_REG_SIOMLT_SEND = next;
+    l->last_tx_word = next;
+    l->slave_word_loaded = 1;
+}
+
 static void hw_start(gba_link_t *l) {
     /* No GPIO mode. RCNT bit 15 must remain zero. */
     GBA_REG_RCNT = 0;
@@ -226,6 +237,8 @@ void gba_link_service(gba_link_t *l) {
     if (cnt & GBA_SIO_START) {
         l->transfer_started_seen = 1;
         l->transfer_active = 1;
+        if (!l->parent)
+            l->slave_word_loaded = 0;
         return;
     }
 
@@ -240,11 +253,7 @@ void gba_link_service(gba_link_t *l) {
          * The slave has no clock. Its next outgoing word must be in
          * SIOMLT_SEND before the master starts again.
          */
-        if (!l->parent) {
-            uint16_t next = make_next_tx(l);
-            GBA_REG_SIOMLT_SEND = next;
-            l->last_tx_word = next;
-        }
+        slave_preload(l);
     }
 
     /*
@@ -256,15 +265,12 @@ void gba_link_service(gba_link_t *l) {
 
     if (!l->parent) {
         /*
-         * Slave fallback: poll the received word as well. Re-processing the
-         * same DATA is harmless because sequence numbers make duplicates
-         * idempotent, and it re-arms the ACK if the SERIAL IRQ was lost.
+         * If SERIAL was lost, re-read the stable post-transfer register. This
+         * is idempotent because DATA carries a sequence number.
          */
-        handle_rx(l, GBA_REG_SIOMULTI0);
-        {
-            uint16_t next = make_next_tx(l);
-            GBA_REG_SIOMLT_SEND = next;
-            l->last_tx_word = next;
+        if (!l->transfer_active) {
+            handle_rx(l, GBA_REG_SIOMULTI0);
+            slave_preload(l);
         }
         return;
     }

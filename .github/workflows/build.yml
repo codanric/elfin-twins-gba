@@ -21,3 +21,11 @@ jobs:
 
       - name: Build link test ROM
         run: make -C gba/linktest
+
+      - name: Upload ROMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: elfin-twins-gba-build
+          path: |
+            gba/elfin/elfin-twins.gba
+            gba/linktest/elfin-linktest.gba

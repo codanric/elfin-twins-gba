@@ -299,7 +299,7 @@ done:
 int main(void) {
     REG_WAITCNT = 0x4317;   /* ROM 3/1 wait states + prefetch */
 
-    irq_init(NULL);
+    irq_init((fnptr)isr_master_nest);
     irq_add(II_VBLANK, NULL);
     REG_DISPCNT = DCNT_MODE3 | DCNT_BG2;
     tte_init_bmp(3, &verdana9Font, NULL);

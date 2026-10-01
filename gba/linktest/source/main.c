@@ -11,7 +11,7 @@
  * SELECT = reset the native transport session
  * START = set RTC after a power-loss indication
  *
- * The transport itself is native 16-bit GBA multiplayer SIO at 38400 bps;
+ * The transport itself is native 16-bit GBA multiplayer SIO at 115200 bps;
  * no GPIO/RCNT electrical emulation is involved.
  */
 #include <stdio.h>
@@ -74,16 +74,13 @@ int main(void) {
     gba_link_init(&link);
     gba_link_set_enabled(&link, 1);
 
-    /* Parent pacing timer; transfer completion is caught by SERIAL IRQ. */
+    /* Same master pacing used by Pokemon Emerald's cable link: 197 ticks
+     * at /64 (~0.751 ms). Only the hardware master asserts SIO START. */
     REG_TM0CNT_H = 0;
-    REG_TM0CNT_L = (u16)(65536 - 50);
+    REG_TM0CNT_L = (u16)(65536 - 197);
     irq_add(II_TIMER0, link_timer_isr);
     irq_set(II_SERIAL, link_serial_isr, ISR_PRIO(0) | ISR_REPLACE);
-
-    /* 50 ticks at 16.78 MHz / 1024 = 3.052 ms. This timer is the
-     * multiplayer master clock source; configuring TM0CNT_L alone does not
-     * start it. */
-    REG_TM0CNT_H = TM_ENABLE | TM_IRQ | TM_FREQ_1024;
+    REG_TM0CNT_H = TM_ENABLE | TM_IRQ | TM_FREQ_64;
 
     rtc_result = rtc_init();
     rtc_time_t t0;
@@ -168,7 +165,7 @@ int main(void) {
             }
         }
 
-        put(16, "Native 16-bit SIO / 38400 bps");
+        put(16, "Native 16-bit SIO / 115200 bps");
         put(17, "No GPIO pin mapping is used.");
         put(18, "Connect both GBAs, then use A/B.");
         put(19, "Both units should say READY.");

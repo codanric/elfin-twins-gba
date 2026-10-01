@@ -1,7 +1,8 @@
 /*
  * Real-time emulation driver: runs the SPLB20 core from a 2048 Hz timer
  * interrupt (273 emulated cycles per interrupt), applies button presses,
- * bridges port A bit 5 to the link cable and drives the GBA sound hardware.
+ * carries the original link messages over the GBA's native multiplayer SIO
+ * bus and drives the GBA sound hardware.
  */
 #ifndef EMU_H
 #define EMU_H
@@ -13,8 +14,8 @@
 #define EMU_IRQ_HZ     2048
 #define EMU_SLICE_FP   ((EMU_CLOCK << SPLB20_FP) / EMU_IRQ_HZ)   /* 70000 */
 
-/* Elfin Twins port A: bits 0-4 buttons (active low), bit 5 link line,
- * bits 6-7 buzzer. Masks from BrickEmuPy's ElfinTwins.brick. */
+/* Elfin Twins port A: bits 0-4 buttons (active low), bit 5 is kept as a
+ * virtual input by the emulator, bits 6-7 buzzer. */
 #define PA_ESC    0x01
 #define PA_LEFT   0x02
 #define PA_RIGHT  0x04
@@ -25,6 +26,8 @@
 #define PA_LINK   0x20
 
 enum { LINK_OFF = 0, LINK_ON_SD = 1, LINK_ON_SC = 2 };
+/* LINK_ON_SD and LINK_ON_SC remain as save-file-compatible values; both now
+ * mean "use the native GBA Game Link Cable". */
 
 extern splb20_t cpu;
 

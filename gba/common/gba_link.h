@@ -72,6 +72,7 @@ typedef struct {
     uint8_t wake_delivered;
 
     uint8_t answer_armed;
+    uint8_t recv_armed;
     uint16_t last_rx_word;
     uint16_t last_tx_word;
     uint16_t last_sio;

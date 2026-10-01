@@ -304,9 +304,10 @@ static void menu(void) {
                     emu_link_bus_ready, emu_link_peer_seen,
                     (unsigned long)emu_link_sio_errors);
             ui_center(128, C_DIM, line);
-            sprintf(line, "H %lu/%lu/%lu  W %04X/%04X",
+            sprintf(line, "H %lu/%lu/%lu/%lu W %04X/%04X",
                     (unsigned long)emu_link_hook_send,
                     (unsigned long)emu_link_hook_recv,
+                    (unsigned long)emu_link_hook_exchange,
                     (unsigned long)emu_link_hook_answer,
                     emu_link_last_rx, emu_link_last_tx);
             ui_center(139, C_DIM, line);

@@ -6,7 +6,7 @@ MAKER_CODE    := 00
 COMMON        := ../common
 CORE          := ../core
 SOURCES       := source/main.c source/save.c source/assets.c \
-                 $(COMMON)/rtc.c $(COMMON)/linkio.c $(CORE)/elfin_catchup.c \
+                 $(COMMON)/rtc.c $(COMMON)/gba_link.c $(CORE)/elfin_catchup.c \
                  $(CORE)/elfin_link.c
 IWRAM_SOURCES := source/emu.c source/lcd.c $(CORE)/splb20.c
 INCLUDES      := source $(COMMON) $(CORE)

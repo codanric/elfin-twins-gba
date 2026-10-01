@@ -5,7 +5,7 @@
  * Cable used by ordinary multiplayer games.
  *
  * A = send edge-count 10 (Elfin "hello" result)
- * B = send edge-count 1  (Elfin answer)
+ * B = send edge-count 1  (ordinary DATA test)
  * L = send edge-count 4
  * R = send edge-count 7
  * SELECT = reset the native transport session
@@ -26,6 +26,10 @@ static char line[48];
 static int rtc_result;
 static uint32_t rtc_first_secs;
 static uint32_t timer_first;
+static volatile uint32_t timer_irqs;
+static volatile uint32_t serial_irqs;
+static uint32_t app_rx_count;
+static uint8_t app_last_count;
 
 static void put(int row, const char *s) {
     char buf[32];
@@ -39,10 +43,12 @@ static void put(int row, const char *s) {
 }
 
 static void link_timer_isr(void) {
+    ++timer_irqs;
     gba_link_service(&link);
 }
 
 static void link_serial_isr(void) {
+    ++serial_irqs;
     gba_link_on_serial(&link);
 }
 
@@ -101,6 +107,15 @@ int main(void) {
             rtc_result = RTC_OK;
         }
 
+        /* The test app is the consumer. Drain every DATA message so repeated
+         * button tests cannot fill the transport queue and manufacture a
+         * failure unrelated to the cable. */
+        uint8_t received;
+        while (gba_link_recv_count(&link, &received)) {
+            app_last_count = received;
+            ++app_rx_count;
+        }
+
         uint16_t sio = gba_link_status(&link);
         int ready = gba_link_is_ready(&link);
 
@@ -122,33 +137,39 @@ int main(void) {
                  (unsigned long)link.frames_rx,
                  (unsigned long)link.frames_tx);
         put(6, line);
-        put(7, "A:10  B:1  L:4  R:7");
-        put(8, "SELECT:reinit  START:set RTC");
+        snprintf(line, sizeof(line), "IRQ S:%lu T:%lu  data:%lu/%u",
+                 (unsigned long)serial_irqs,
+                 (unsigned long)timer_irqs,
+                 (unsigned long)app_rx_count,
+                 app_last_count);
+        put(7, line);
+        put(8, "A:10  B:1  L:4  R:7");
+        put(9, "SELECT:reinit  START:set RTC");
 
-        put(10, "------------------------------");
+        put(11, "------------------------------");
         if (!rtc_present()) {
-            put(11, "RTC: NOT FOUND");
-            put(12, "enable RTC in flashcart menu");
+            put(12, "RTC: NOT FOUND");
+            put(13, "enable RTC in flashcart menu");
         } else {
             rtc_time_t t;
             if (rtc_get(&t) == 0) {
                 if (!timer_first) timer_first = 1;
                 snprintf(line, sizeof(line), "RTC:%04u-%02u-%02u %02u:%02u:%02u",
                          t.year, t.month, t.day, t.hour, t.minute, t.second);
-                put(11, line);
+                put(12, line);
                 uint32_t elapsed = rtc_first_secs ? rtc_to_seconds(&t) - rtc_first_secs : 0;
-                put(12, rtc_result == RTC_POWER_LOST ? "RTC: POWER LOST" : "RTC: OK");
+                put(13, rtc_result == RTC_POWER_LOST ? "RTC: POWER LOST" : "RTC: OK");
                 snprintf(line, sizeof(line), "RTC elapsed:%lu s", (unsigned long)elapsed);
-                put(13, line);
+                put(14, line);
             } else {
-                put(11, "RTC: INVALID");
-                put(12, "");
+                put(12, "RTC: INVALID");
                 put(13, "");
+                put(14, "");
             }
         }
 
-        put(15, "Native 16-bit SIO / 38400 bps");
-        put(16, "No GPIO pin mapping is used.");
+        put(16, "Native 16-bit SIO / 38400 bps");
+        put(17, "No GPIO pin mapping is used.");
         put(18, "Connect both GBAs, then use A/B.");
         put(19, "Both units should say READY.");
     }

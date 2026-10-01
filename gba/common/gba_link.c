@@ -1,21 +1,15 @@
 /*
  * GBA Multi-Player SIO transport.
  *
- * Hardware facts used here:
- *   - RCNT=0 selects normal serial/multiplayer/UART modes.
- *   - SIOCNT bit 13 selects Multi-Player, bits 0-1 select baud.
- *   - The cable elects one parent; only the parent starts transfers.
- *   - Each transfer puts the local SIOMLT_SEND word in the matching
- *     SIOMULTI slot at the other end.
- *
- * The Elfin emulation layer turns an original link_send pulse train into
- * one edge-count frame. This transport only moves that semantic message.
+ * Timing is supervised by a dedicated 61.04 us timer rather than the
+ * SERIAL IRQ. That makes the transport independent of interrupt-dispatch
+ * loss in the surrounding runtime and also gives the slave enough polling
+ * resolution to observe a complete 115200-bps 16-bit transfer (~139 us).
  */
 #include <string.h>
 #include "gba_link.h"
 
-#define POLL_INTERVAL_TICKS 6 /* 6 * 488 us ~= 2.93 ms */
-#define GBA_SIO_ERROR 0x0040
+#define POLL_INTERVAL_TICKS 50 /* 50 * 61.035 us ~= 3.052 ms */
 
 static uint16_t frame_make(uint8_t edges) {
     return (uint16_t)(ELINK_FRAME_MAGIC | ELINK_FRAME_EDGE | edges);
@@ -30,64 +24,46 @@ static int frame_edges(uint16_t word, uint8_t *edges) {
     return 1;
 }
 
+static void process_completed(gba_link_t *l) {
+    if (!l->transfer_active)
+        return;
+    if (GBA_REG_SIOCNT & GBA_SIO_START)
+        return;
+
+    l->transfer_active = 0;
+    l->rx_word = l->parent ? GBA_REG_SIOMULTI1 : GBA_REG_SIOMULTI0;
+    l->rx_pending = 1;
+}
+
 void gba_link_init(gba_link_t *l) {
+    uint8_t enabled = l->enabled;
+
     memset(l, 0, sizeof(*l));
 
-    /* Stop any previous mode before selecting multiplayer. */
+    /*
+     * RCNT bit 15=0 selects normal/multiplayer/UART rather than GPIO.
+     * SIOCNT bit 13=1 selects 16-bit multiplayer mode.
+     */
     GBA_REG_SIOCNT = 0;
     GBA_REG_RCNT = 0;
-    GBA_REG_SIOCNT = GBA_SIO_MULTI | GBA_SIO_BAUD_115200 | GBA_SIO_IRQ;
+    GBA_REG_SIOCNT = GBA_SIO_MULTI | GBA_SIO_BAUD_115200;
 
-    /*
-     * The cable hardware determines parent/child. The terminal bit is valid
-     * before the first transfer on real hardware; readiness is additionally
-     * gated on SD-terminal (bit 3).
-     */
+    l->enabled = enabled;
     l->parent = (GBA_REG_SIOCNT & GBA_SIO_CHILD) == 0;
     l->ready = (GBA_REG_SIOCNT & GBA_SIO_READY) != 0;
     l->tx_word = ELINK_FRAME_IDLE;
     GBA_REG_SIOMLT_SEND = l->tx_word;
 }
 
-void gba_link_irq(gba_link_t *l) {
-    uint16_t cnt = GBA_REG_SIOCNT;
-    if (cnt & GBA_SIO_START)
-        return; /* not a completion */
-
-    /*
-     * An interrupt can occur for a stale/initialised transfer. Ignore it
-     * unless the cable reports a valid multiplayer link.
-     */
-    l->ready = (cnt & GBA_SIO_READY) != 0;
-    if (!l->ready)
-        return;
-
-    if (l->parent)
-        l->rx_word = GBA_REG_SIOMULTI1;
-    else
-        l->rx_word = GBA_REG_SIOMULTI0;
-
-    l->rx_pending = 1;
-    l->transfer_done = 1;
-
-    /* A slave's transmit word must be loaded before the next parent start. */
-    if (!l->parent) {
-        if (l->tx_pending) {
-            GBA_REG_SIOMLT_SEND = l->tx_word;
-            l->tx_pending = 0;
-        } else {
-            GBA_REG_SIOMLT_SEND = ELINK_FRAME_IDLE;
-        }
-    }
-}
-
 void gba_link_service(gba_link_t *l) {
-    uint16_t cnt = GBA_REG_SIOCNT;
+    uint16_t cnt;
 
     if (!l->enabled) {
         l->ready = 0;
         return;
     }
+
+    cnt = GBA_REG_SIOCNT;
 
     if (cnt & GBA_SIO_ERROR) {
         uint8_t enabled = l->enabled;
@@ -102,57 +78,71 @@ void gba_link_service(gba_link_t *l) {
 
     l->parent = (cnt & GBA_SIO_CHILD) == 0;
 
+    /*
+     * First harvest a transfer which finished since the last service tick.
+     * At 61 us polling this still catches the ~139 us 16-bit wire transfer.
+     */
+    if (l->transfer_active)
+        process_completed(l);
+
+    /*
+     * A child does not generate clocks. Its send register is written as soon
+     * as application data is queued; the next parent start latches it.
+     */
     if (!l->parent)
         return;
 
-    /* Parent must not restart until the previous transfer has completed. */
-    if (cnt & GBA_SIO_START)
+    /* Parent starts transfers on a fixed ~3.05 ms cadence. */
+    if (l->transfer_active)
         return;
 
-    if (l->poll_ticks)
+    if (l->poll_ticks) {
         --l->poll_ticks;
-    if (l->poll_ticks)
         return;
+    }
 
-    /*
-     * Keep polling even with no application data. This is important because
-     * a child can queue its response after processing the preceding poll.
-     */
     GBA_REG_SIOMLT_SEND = l->tx_pending ? l->tx_word : ELINK_FRAME_IDLE;
     l->tx_pending = 0;
     GBA_REG_SIOCNT = cnt | GBA_SIO_START;
+    l->transfer_active = 1;
     l->poll_ticks = POLL_INTERVAL_TICKS;
 }
 
 int gba_link_send_edge_count(gba_link_t *l, uint8_t edges) {
     if (!l->enabled || !l->ready)
         return 0;
-    if (l->tx_pending)
-        return 0;
 
-    l->tx_word = frame_make(edges);
-    if (l->parent || (GBA_REG_SIOCNT & GBA_SIO_START)) {
+    if (l->parent) {
+        if (l->tx_pending)
+            return 0;
+        l->tx_word = frame_make(edges);
         l->tx_pending = 1;
     } else {
         /*
-         * Slaves must have their next word loaded before the parent clocks
-         * the next transfer. If the parent is not currently clocking, it is
-         * safe to publish it immediately; otherwise the serial IRQ publishes
-         * it when the current transfer completes.
+         * In multiplayer mode the send register is the slave's next outgoing
+         * word. Writing it while a transfer is active is safe because the
+         * current word was already clocked; the new value is used by the next
+         * parent start.
          */
+        l->tx_word = frame_make(edges);
         GBA_REG_SIOMLT_SEND = l->tx_word;
-        l->tx_pending = 0;
     }
+
     l->edges_tx++;
     return 1;
 }
 
 int gba_link_recv_edge_count(gba_link_t *l, uint8_t *edges) {
+    uint16_t word;
+
     if (!l->rx_pending)
         return 0;
+
     l->rx_pending = 0;
-    if (!frame_edges(l->rx_word, edges))
+    word = l->rx_word;
+    if (!frame_edges(word, edges))
         return 0;
+
     l->edges_rx++;
     return 1;
 }

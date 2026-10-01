@@ -43,38 +43,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Resolve the actual ROM-state addresses from the just-built ELF.
-          docker run --rm \
-            -v "${GITHUB_WORKSPACE}:/work" \
-            -w /work \
-            devkitpro/devkitarm:latest \
-            /bin/bash -lc '/opt/devkitpro/devkitARM/bin/arm-none-eabi-nm -n gba/linktest/build/elfin-linktest.elf' \
-            > /tmp/linktest.nm
-
-          export LINK_BASE=$(awk '$3 == "link" {print $1; exit}' /tmp/linktest.nm)
-          export APP_RX_ADDR=$(awk '$3 == "app_rx_count" {print $1; exit}' /tmp/linktest.nm)
-          export APP_LAST_ADDR=$(awk '$3 == "app_last_count" {print $1; exit}' /tmp/linktest.nm)
-          test -n "$LINK_BASE"
-          test -n "$APP_RX_ADDR"
-          test -n "$APP_LAST_ADDR"
-
-          cat >/tmp/link-layout.c <<'EOF'
-          #include <stddef.h>
-          #include <stdio.h>
-          #include "gba/common/gba_link.h"
-          int main(void) {
-              printf("OFF_READY=%zu\n", offsetof(gba_link_t, ready));
-              printf("OFF_PARENT=%zu\n", offsetof(gba_link_t, parent));
-              printf("OFF_PEER=%zu\n", offsetof(gba_link_t, peer_seen));
-              printf("OFF_FRAMES_RX=%zu\n", offsetof(gba_link_t, frames_rx));
-              printf("OFF_FRAMES_TX=%zu\n", offsetof(gba_link_t, frames_tx));
-              printf("OFF_ERRORS=%zu\n", offsetof(gba_link_t, sio_errors));
-              return 0;
-          }
-          EOF
-          gcc -I. /tmp/link-layout.c -o /tmp/link-layout
-          while IFS='=' read -r k v; do export "$k=$v"; done < <(/tmp/link-layout)
-
           curl -fL --retry 3 \
             https://s3.amazonaws.com/mgba/mGBA-build-latest-appimage-x64.appimage \
             -o /tmp/mgba.appimage
@@ -88,58 +56,143 @@ jobs:
 
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends \
-            xvfb libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0
+            xvfb openbox xdotool libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0
 
           "$MGBA_QT" --version | tee /tmp/mgba-version.txt
-          rm -f /tmp/mgba-probe-*.txt /tmp/mgba-probe-*.png /tmp/mgba-ui.log
 
-          set +e
-          timeout 10s xvfb-run -a "$MGBA_QT" \
-            --script "$GITHUB_WORKSPACE/gba/host/mgba_link_probe.lua" \
-            "$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.gba" \
-            "$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.gba" \
-            >/tmp/mgba-ui.log 2>&1
-          rc=$?
-          set -e
-          if [ "$rc" -ne 0 ] && [ "$rc" -ne 124 ]; then
-            cat /tmp/mgba-ui.log
-            exit "$rc"
-          fi
+          # Different ROM basenames force distinct .sav files. The link-test
+          # ROM writes a fixed ELNK probe record to SRAM every frame.
+          cp gba/linktest/elfin-linktest.gba /tmp/elfin-linktest-p0.gba
+          cp gba/linktest/elfin-linktest.gba /tmp/elfin-linktest-p1.gba
+          rm -f /tmp/elfin-linktest-p0.sav /tmp/elfin-linktest-p1.sav \
+                /tmp/mgba-ui.log /tmp/mgba-windows.txt
 
-          cat /tmp/mgba-ui.log || true
-          ls -l /tmp/mgba-probe-*.txt /tmp/mgba-probe-*.png
-          cat /tmp/mgba-probe-*.txt
+          Xvfb :99 -screen 0 1280x720x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
+          xpid=$!
+          export DISPLAY=:99
+          openbox >/tmp/openbox.log 2>&1 &
+          obpid=$!
+          mpid=
+          cleanup() {
+            if [ -n "${mpid:-}" ]; then kill "$mpid" 2>/dev/null || true; fi
+            kill "$obpid" "$xpid" 2>/dev/null || true
+            wait "$mpid" 2>/dev/null || true
+            wait "$obpid" 2>/dev/null || true
+            wait "$xpid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          sleep 1
 
-          python3 - <<'PY'
-          import glob
+          "$MGBA_QT" -C savegamePath=/tmp \
+            /tmp/elfin-linktest-p0.gba \
+            /tmp/elfin-linktest-p1.gba \
+            >/tmp/mgba-ui.log 2>&1 &
+          mpid=$!
 
-          reports = {}
-          for path in glob.glob('/tmp/mgba-probe-*.txt'):
-              d = {}
-              with open(path) as f:
-                  for line in f:
-                      k, v = line.strip().split('=', 1)
-                      d[k] = int(v, 16) if k == 'sio' else int(v)
-              reports[d['player']] = d
+          # Wait until both emulator windows exist.
+          for i in $(seq 1 120); do
+            mapfile -t wins < <(xdotool search --onlyvisible --name "mGBA" 2>/dev/null || true)
+            if [ "${#wins[@]}" -ge 2 ]; then break; fi
+            if ! kill -0 "$mpid" 2>/dev/null; then
+              cat /tmp/mgba-ui.log
+              exit 1
+            fi
+            sleep 0.1
+          done
+          mapfile -t wins < <(xdotool search --onlyvisible --name "mGBA" 2>/dev/null || true)
+          printf "window_count=%d\n" "${#wins[@]}" | tee /tmp/mgba-windows.txt
+          [ "${#wins[@]}" -ge 2 ]
+
+          # Allow HELLO transfers to settle, then press GBA A (default X key)
+          # on both consoles. Each ROM queues Elfin DATA value 10.
+          sleep 2
+          for w in "${wins[@]:0:2}"; do
+            xdotool keydown --window "$w" x
+            sleep 0.15
+            xdotool keyup --window "$w" x
+          done
+
+          # Wait for each ROM's SRAM probe record to appear and be flushed.
+          for i in $(seq 1 80); do
+            if [ -s /tmp/elfin-linktest-p0.sav ] && [ -s /tmp/elfin-linktest-p1.sav ]; then
+              break
+            fi
+            sleep 0.1
+          done
+          sleep 2
+          test -s /tmp/elfin-linktest-p0.sav
+          test -s /tmp/elfin-linktest-p1.sav
+
+          python3 - <<'PY' | tee /tmp/mgba-probe.txt
+          from pathlib import Path
+
+          def u16(b, o):
+              return b[o] | (b[o+1] << 8)
+
+          def u32(b, o):
+              return u16(b, o) | (u16(b, o+2) << 16)
+
+          def parse(path):
+              b = Path(path).read_bytes()
+              assert len(b) >= 36, (path, len(b))
+              assert b[:4] == b'ELNK', (path, b[:8].hex())
+              assert b[4] == 1, (path, b[4])
+              return {
+                  'path': path,
+                  'id': b[5],
+                  'parent': b[6],
+                  'ready': b[7],
+                  'peer': b[8],
+                  'app_last': b[9],
+                  'frames_rx': u32(b, 12),
+                  'frames_tx': u32(b, 16),
+                  'sio_errors': u32(b, 20),
+                  'app_rx': u32(b, 24),
+                  'last_rx': u16(b, 28),
+                  'last_tx': u16(b, 30),
+                  'sio': u16(b, 32),
+                  'serial_irqs': u16(b, 34),
+              }
+
+          raw = [
+              parse('/tmp/elfin-linktest-p0.sav'),
+              parse('/tmp/elfin-linktest-p1.sav'),
+          ]
+          reports = {r['id']: r for r in raw}
+
+          for r in raw:
+              print(
+                  f"{r['path']}: id={r['id']} parent={r['parent']} "
+                  f"ready={r['ready']} peer={r['peer']} "
+                  f"rx={r['frames_rx']} tx={r['frames_tx']} "
+                  f"app_rx={r['app_rx']} app_last={r['app_last']} "
+                  f"errors={r['sio_errors']} sio={r['sio']:04X} "
+                  f"last={r['last_rx']:04X}/{r['last_tx']:04X} "
+                  f"serial_irqs={r['serial_irqs']}"
+              )
 
           assert set(reports) == {0, 1}, reports
           p0, p1 = reports[0], reports[1]
 
-          assert p0['parent'] == 1, reports
-          assert p1['parent'] == 0, reports
+          # Emerald hardware role rule: player 0 is master, player 1 is child.
+          assert p0['parent'] == 1 and p1['parent'] == 0, reports
           assert p0['ready'] == p1['ready'] == 1, reports
           assert p0['peer'] == p1['peer'] == 1, reports
           assert p0['sio_errors'] == p1['sio_errors'] == 0, reports
+          assert p0['serial_irqs'] > 0 and p1['serial_irqs'] > 0, reports
 
-          # The Lua probe presses A only on player 0. In the link-test ROM that
-          # queues Elfin count 10. Player 1 must actually consume that value.
-          assert p0['frames_tx'] >= 1, reports
-          assert p1['frames_rx'] >= 1, reports
-          assert p1['app_rx'] >= 1, reports
-          assert p1['app_last'] == 10, reports
+          # Both windows received A, so each must transmit DATA 10 and each
+          # peer must consume DATA 10 inside the actual GBA ROM.
+          for r in (p0, p1):
+              assert r['frames_tx'] >= 1, reports
+              assert r['frames_rx'] >= 1, reports
+              assert r['app_rx'] >= 1, reports
+              assert r['app_last'] == 10, reports
 
-          print('PASS: mGBA multiplayer carried Elfin DATA 10 from P0 to P1')
+          print("PASS: mGBA multiplayer moved Elfin DATA 10 both directions")
           PY
+
+          cat /tmp/mgba-ui.log || true
 
       - name: Upload mGBA evidence
         if: always()
@@ -150,9 +203,12 @@ jobs:
           path: |
             /tmp/mgba-version.txt
             /tmp/mgba-ui.log
-            /tmp/mgba-probe-*.txt
-            /tmp/mgba-probe-*.png
-            /tmp/linktest.nm
+            /tmp/mgba-windows.txt
+            /tmp/mgba-probe.txt
+            /tmp/elfin-linktest-p0.sav
+            /tmp/elfin-linktest-p1.sav
+            /tmp/openbox.log
+            /tmp/xvfb.log
 
       - name: Upload ROMs
         uses: actions/upload-artifact@v4

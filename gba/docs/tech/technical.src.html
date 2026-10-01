@@ -62,7 +62,7 @@
     SPLB20 core, an analysis disassembler and instrumented emulation.<br>
     Companion files: <code>gba/docs/analysis/elfin_twins.asm</code> (annotated disassembly of the whole ROM),
     <code>gba/tools/elfin_symbols.py</code> (symbol table), <code>gba/host/*</code> (verification and analysis
-    tools).<br>September 2026.
+    tools).<br>October 2026.
   </div>
 </section>
 
@@ -100,7 +100,7 @@
     <div>7.2 Core port and verification</div>
     <div>7.3 Performance</div>
     <div>7.4 Display, input, sound</div>
-    <div>7.5 Link bridge</div>
+    <div>7.5 Native GBA link transport</div>
     <div>7.6 RTC catch-up</div>
     <div>7.7 Saving</div>
     <div>7.8 Build and test tooling</div>
@@ -399,43 +399,51 @@ if sickness >= 10 or money == 0:  collapse (mode A)</pre>
 <section>
   <h2>6 Link protocol</h2>
   <h3>Physical layer</h3>
-  <p>One wire on PA5, idle high through pull-ups. A unit transmits by making PA5 an output (<code>PA_DIR=$1F</code>)
-    and writing levels, and returns to input (<code>$3F</code>) to receive. A falling edge wakes a sleeping unit
-    through the key interrupt <span class="conf c-code">code</span>.</p>
-  <h3>Messages: pulse counts</h3>
-  <p><code>link_send $BE0A</code> drives the line low, waits ~183 ms, then writes <code>tmp_count</code> levels
-    toggling every ~1.26 ms (88 × 8 cycles), holds ~7.6 ms and releases. <code>link_recv $BE41</code> waits for the line
-    to leave its current level, then counts edges until it has been quiet for 10 × ~0.34 ms. The message is the edge count.
-    Because <code>delay_183ms</code> overwrites <code>tmp</code>, which is the level variable of the send loop, the first
-    write repeats the initial low and the last write is <b>low</b> <span class="conf c-code">code</span>
-    <span class="conf c-obs">observed</span>.</p>
+  <p>The original toy uses one PA5 wire, idle high through pull-ups. A sender makes PA5 an output, drives a
+    timed low/toggle sequence, then returns it to input. A falling edge can wake the other unit through the key
+    interrupt <span class="conf c-code">code</span>.</p>
+
+  <h3>Messages: sender count versus received edges</h3>
+  <p><code>link_send $BE0A</code> sends a pulse train from <code>tmp_count</code>; <code>link_recv $BE41</code>
+    returns the number of edges it observed. The receiver sees one fewer counted edge than the sender's
+    <code>tmp_count</code>. The responder's initial answer is a separate wake pulse, not a normal counted packet
+    <span class="conf c-code">code</span> <span class="conf c-obs">observed</span>.</p>
   <table class="compact">
-    <tr><th>Sent (tmp_count)</th><th>Edges seen</th><th>Meaning</th></tr>
-    <tr><td>11</td><td>10 (+ initial fall used as wake-up)</td><td>"hello" from the caller (<code>$B7A5</code>); accepted only if exactly 10 (<code>$8ED7</code>)</td></tr>
-    <tr><td>held low ~2.8 s</td><td>1 fall</td><td>answer: "I'm here" (state 4, <code>$BA91</code>)</td></tr>
-    <tr><td>8</td><td>—</td><td>caller ready / game over, back to the menu</td></tr>
-    <tr><td>choice + 2</td><td>2 / 3 / 4</td><td>game chosen: tug-of-war, rock-paper-scissors, arm wrestling</td></tr>
-    <tr><td>5</td><td>—</td><td>round finished (IQ, stamina, friendship +1)</td></tr>
-    <tr><td>15</td><td>—</td><td>cancel (ESC)</td></tr>
+    <tr><th>Sender tmp_count</th><th>Receiver sees</th><th>Meaning</th></tr>
+    <tr><td>11</td><td>10</td><td>initial hello; the auto-responder accepts exactly 10 (<code>$8ED4-$8ED9</code>)</td></tr>
+    <tr><td>special low pulse</td><td>wake event</td><td>responder answer in state 4 (<code>$BA91</code>); not a counted packet</td></tr>
+    <tr><td>8</td><td>7</td><td>context-dependent ready / acknowledgement / heartbeat</td></tr>
+    <tr><td>2 / 3 / 4</td><td>1 / 2 / 3</td><td>select tug-of-war / rock-paper-scissors / arm wrestling</td></tr>
+    <tr><td>5</td><td>4</td><td>completion/result notification used by the competitive games</td></tr>
+    <tr><td>15</td><td>14</td><td>cancel / reset the link session</td></tr>
   </table>
+
   <h3>Session state machine (link_state, $B5)</h3>
-  <pre class="seq">caller                                   answerer
-------                                   --------
-menu Link + ENTER: B5=$80, send 11  ───► wake on fall, link_recv = 10 edges
-                                         B5=4: hold line low (answer), release, B5=5
-wake on fall with PA5 low: B5=1     ◄─── (the answer)
-B5=1: send 8, B5=2: game menu
-ENTER: send choice+2                ───► B5=5: receive, start the same game
-both: game $6E/$5E/$2E …, scores, send 5 / 8, back to the menu
-ESC on either side: send 15, both go home.
-timeouts: caller gives up after 6 ticks without an edge (L_B735)</pre>
-  <div class="box warn"><b>The latched-edge observation.</b> The answerer's quiet detection (≈3.4 ms) ends before the caller
-    releases the line (≈7.6 ms hold), so the answer pulse starts while the line is already low. The caller never sees a
-    new falling edge on its pin. With the emulator's edge-triggered key interrupt the handshake fails in <b>every</b> case
-    (27/27 timing combinations). It succeeds in every case if a falling edge of the wire is <b>latched</b> and delivered
-    once the key interrupt is enabled again, which is common MCU behaviour. The real toys evidently connect, so we believe
-    the SPLB20 latches port-change events. The GBA link bridge implements that model (§7.5)
-    <span class="conf c-obs">observed</span> <span class="conf c-inf">inferred</span>.</div>
+  <pre class="seq">caller                                      responder
+------                                      ---------
+Link + ENTER: B5=$80, send 11          ───► auto-answer receives 10
+                                             B5=4, emit wake pulse, then B5=5
+wake converts caller to B5=1            ◄─── wake pulse
+B5=1: send 8; then B5=2                ───► receives 7 (ready)
+choose game: send 2/3/4, then receive  ◄──► B5=5 receives 1/2/3,
+                                             sends 8 acknowledgement, enters game
+caller receives 7 acknowledgement and enters the same game
+games run in modes $6E/$2E/$5E; results update scores/stats and may swap roles
+ESC sends 15; receiving 14 returns the peer home.</pre>
+  <p><code>S_BDB4 $BDB4</code> is the key selection path: it sends the chosen game and then immediately calls
+    <code>link_recv</code> at <code>$BDEC</code>. On the responder, state 5 receives the command at
+    <code>$BB49</code>, sends <code>tmp_count=8</code> at <code>$BB5F</code>, and enters the selected game. Therefore
+    the caller's proof that negotiation succeeded is the responder acknowledgement (received edge count 7), not a
+    separate transmit-completion state <span class="conf c-code">code</span>.</p>
+  <p>Timeouts are asymmetric. Passive states (<code>B5 &gt;= 4</code>) return home after six link ticks with no link
+    interrupt (<code>$B735-$B749</code>). Active states send an 8-count heartbeat every third tick. The initial
+    caller state <code>$80</code> is <b>not</b> governed by that six-tick passive timeout; an unanswered initial call
+    follows its own short failure/reset path <span class="conf c-code">code</span>.</p>
+
+  <div class="box warn"><b>Original-hardware wake edge.</b> Timing experiments on the emulated SPLB20 suggest the
+    real toy must preserve a PA5 wake event across the point where the key interrupt is re-enabled; the exact electrical
+    behaviour of the original chip remains inferred. The GBA port no longer depends on reproducing that analogue timing:
+    it transports the responder wake as an explicit logical event (§7.5).</div>
   <figure><img src="../img/link_game_a.png" style="width:150mm"><figcaption>Tug-of-war on the caller, recorded from two emulated units connected by the simulated wire.</figcaption></figure>
 </section>
 
@@ -450,7 +458,7 @@ timeouts: caller gives up after 6 ticks without an edge (L_B735)</pre>
     <tr><td>SPLB20 core</td><td><code>gba/core/splb20.c</code></td><td>ARM, IWRAM</td></tr>
     <tr><td>Emulation driver: pacing, buttons, sound, link</td><td><code>gba/elfin/source/emu.c</code></td><td>ARM, IWRAM, 2048 Hz timer IRQ</td></tr>
     <tr><td>LCD renderer</td><td><code>gba/elfin/source/lcd.c</code></td><td>ARM, IWRAM, main loop</td></tr>
-    <tr><td>Link bridge</td><td><code>gba/core/elfin_link.c</code></td><td>from the IRQ</td></tr>
+    <tr><td>Native link transport</td><td><code>gba/common/gba_link.c</code></td><td>VBlank + SERIAL IRQ</td></tr>
     <tr><td>RTC catch-up</td><td><code>gba/core/elfin_catchup.c</code></td><td>at start-up</td></tr>
     <tr><td>RTC driver (S-3511A)</td><td><code>gba/common/rtc.c</code></td><td>—</td></tr>
     <tr><td>Front end: menu, saving</td><td><code>gba/elfin/source/main.c</code>, <code>save.c</code></td><td>Thumb, ROM</td></tr>
@@ -470,7 +478,11 @@ timeouts: caller gives up after 6 ticks without an edge (L_B735)</pre>
     <tr><td><code>test_sleep_skip.py</code></td><td>sleep fast path vs stepping</td><td>identical over 536 s</td></tr>
     <tr><td><code>test_run_equiv.py</code></td><td><code>splb20_run</code> (all fast paths) vs <code>splb20_step</code>, whole-state compare</td><td>identical over 1800 s with random buttons</td></tr>
     <tr><td><code>test_catchup.py</code></td><td>RTC catch-up vs full emulation</td><td>clock, life timer, age, lifespan and mode equal for 6, 24, 30, 48 and 100 h</td></tr>
-    <tr><td><code>test_link.py</code></td><td>call → answer → game over a simulated wire</td><td>27/27 with the bridge (slices 100/273/546 cycles, ±3% skew)</td></tr>
+    <tr><td><code>test_link.py</code></td><td>original toy call → answer → game over a simulated PA5 wire</td><td>27/27 timing combinations</td></tr>
+    <tr><td><code>test_pc_hook_fastpath.py</code></td><td>ROM hook dispatch and native receive WAIT yielding</td><td>all link hooks dispatched; WAIT yields a partial run slice</td></tr>
+    <tr><td><code>test_native_link_flow.py</code></td><td>original ROM caller/responder state flow through game selection</td><td>caller B5=2, responder B5=5; both enter the selected game</td></tr>
+    <tr><td><code>test_gba_link_protocol.c</code></td><td>native multiplayer handshake, roles, queues and error recovery</td><td>pass</td></tr>
+    <tr><td>real GBA hardware</td><td>native cable handshake, auto-answer, game selection and play</td><td>pass on two GBAs</td></tr>
   </table>
 
   <h3>7.3 Performance</h3>
@@ -516,14 +528,27 @@ timeouts: caller gives up after 6 ticks without an edge (L_B735)</pre>
     at these frequencies. Absolute pitch also depends on the 560 kHz clock estimate <span class="conf c-inf">inferred</span>.</p>
   <figure><img src="../img/gba_home.png" style="width:90mm"><figcaption>The port in mGBA.</figcaption></figure>
 
-  <h3>7.5 Link bridge</h3>
-  <p>The GBA link port is used in general-purpose mode (<code>RCNT = $8000 | dir&lt;&lt;4 | data</code>). The toy's
-    wire is mapped to <b>SD</b>, which the GBA link cable connects to every console (SO/SI are daisy-chained).
-    <b>SC</b> can be selected instead. The pin is only ever driven low or released, so two consoles never fight.
-    Once per 2048 Hz slice <code>elfin_link_before()</code> feeds the wire to PA5 and <code>elfin_link_after()</code>
-    drives the wire when PA5 is output-low. A falling wire edge is latched and delivered with
-    <code>splb20_key_irq()</code> when the key interrupt is enabled (§6). A wire never seen high, or low for more than
-    10 s, is ignored. That protects against missing pull-ups and unconnected cables.</p>
+  <h3>7.5 Native GBA link transport</h3>
+  <p>The current port uses the GBA's <b>multiplayer SIO mode</b>, not GPIO bit-banging. <code>RCNT=0</code>,
+    multiplayer mode runs at 115200 bps with SERIAL IRQ enabled. The bus handshake follows the same proven shape used
+    by retail GBA software: the hardware master is identified from SD/SI plus multiplayer ID 0, sends
+    <code>$8FFF</code>, slaves send <code>$B9A0</code>, and the participant count must be stable across two completed
+    transfers before the bus is marked ready.</p>
+  <p>Once ready, only the hardware master starts transfers (one opportunity per VBlank). SERIAL IRQ completion is
+    authoritative. Each completed GBA transfer carries one logical Elfin event: <code>DATA</code> plus a 4-bit edge
+    count, a responder <code>WAKE</code>, or <code>IDLE</code>. This keeps the original Elfin state machine and
+    sender/receiver meanings from §6 while replacing the toy's electrical pulse timing with reliable native cable
+    transport.</p>
+  <p>The ROM bridge intercepts the timing-sensitive original entry points: <code>link_send $BE0D</code>,
+    <code>link_recv $BE41</code>, the selection send/receive path at <code>$BDB7</code>, and the responder wake at
+    <code>$BA99</code>. Outbound messages are queued and the emulated ROM continues immediately. A receive with no
+    packet available yields the current SPLB20 run slice so GBA VBlank/SERIAL interrupts can run; without that yield,
+    a GBA hardware master could wait for an acknowledgement while simultaneously preventing the transfer that would
+    deliver it.</p>
+  <div class="box"><b>Hardware result.</b> The native bus handshake, automatic answer, game selection and linked play
+    were verified on two real GBAs with a standard GBA link cable. The one-sided slow-motion/freeze seen in an earlier
+    test build was traced to the receive-wait scheduling deadlock above and disappeared after the wait-yield fix
+    <span class="conf c-obs">observed</span>.</div>
 
   <h3>7.6 RTC catch-up</h3>
   <p>At start-up the port reads the cartridge RTC (Seiko S-3511A protocol on cartridge GPIO <code>$80000C4–C8</code>; the
@@ -555,7 +580,8 @@ timeouts: caller gives up after 6 ticks without an edge (L_B735)</pre>
     <code>crt0.s</code>, <code>gba.ld</code> and <code>gbafix.py</code>. libtonc is vendored and always built from
     source. Host tools: <code>mgba_run</code> (headless libmgba runner with a fake RTC, key scripts, screenshots and memory
     dumps), the verification scripts of §7.2, the workbench, the link simulator, the analysis disassembler and the figure
-    generator used for this document and the manual.</p>
+    generator used for this document and the manual. Link regressions cover hook dispatch, the original two-unit
+    state flow and the native multiplayer transport; final connection/game behaviour was also checked on real GBAs.</p>
 </section>
 
 <!-- ============================================================ PROVENANCE -->
@@ -626,10 +652,8 @@ timeouts: caller gives up after 6 ticks without an edge (L_B735)</pre>
 <section>
   <h2>9 Open questions</h2>
   <ul>
-    <li><b>Latched key edges.</b> The link model of §6 should be confirmed on real hardware, for example by linking a real
-      toy to the GBA port, or by logging PA5 of two real toys.</li>
-    <li><b>SD pull-up on the GBA link cable in GPIO mode.</b> <code>elfin-linktest.gba</code> reports whether a
-      released SD idles high. If not, the port can use SC.</li>
+    <li><b>Original PA5 wake latching.</b> The exact SPLB20 electrical behaviour inferred in §6 could still be confirmed
+      by probing two original toys; the native GBA transport does not depend on it.</li>
     <li><b>Names of some items.</b> Food items and outings are identified by effect. Their names are inferred from the pictures.</li>
     <li><b>Mini-game scoring.</b> The exact rules of the two games in mode 3 and of the outing challenges were only
       observed, not fully traced.</li>

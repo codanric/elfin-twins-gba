@@ -29,7 +29,7 @@ static uint8_t rx_active;
 static uint8_t rx_edges_left;
 static uint8_t rx_hold;
 
-volatile uint8_t emu_link_ok;      /* wire seen high: cable usable */
+volatile uint8_t emu_link_ok;      /* GBA cable reports a ready multiplayer link */
 /* Pacing: Timer 3 runs freely at 16.78 MHz / 64 = 262144 Hz. Each interrupt
  * runs the emulated cycles for the real time that has passed since the
  * previous one (560000 / 262144 = 4375/2048 cycles = 4375/8 fp8 per tick),
@@ -131,8 +131,14 @@ static void link_sync_out(void) {
 
 volatile uint32_t emu_isr_count;
 
-void gba_link_irq_handler(void) {
-    gba_link_irq(&cable_link);
+/*
+ * Poll GBA SIO from a dedicated 61.04 us timer. We intentionally do not use
+ * the SERIAL IRQ here: the link transport must remain correct even if the
+ * surrounding interrupt dispatcher drops a serial interrupt.
+ */
+void gba_link_timer_isr(void) {
+    cable_link.enabled = (emu_link_mode != LINK_OFF);
+    gba_link_service(&cable_link);
 }
 
 void emu_isr(void) {
@@ -156,8 +162,6 @@ void emu_isr(void) {
     if (owed_fp > OWED_MAX_FP)
         owed_fp = OWED_MAX_FP;
 
-    cable_link.enabled = (emu_link_mode != LINK_OFF);
-    gba_link_service(&cable_link);
     link_sync_in();
     if (owed_fp > 0)
         owed_fp -= splb20_run(&cpu, owed_fp);
@@ -196,7 +200,13 @@ void emu_start(void) {
     REG_TM2CNT_H = 0;
     REG_TM2CNT_L = (u16)(65536 - (16777216 / EMU_IRQ_HZ));
     irq_add(II_TIMER2, emu_isr);
-    irq_add(II_SERIAL, gba_link_irq_handler);
+
+    /* Link supervisor: 16,384 Hz = one tick every 61.035 us. */
+    REG_TM0CNT_H = 0;
+    REG_TM0CNT_L = 0xFFFF;
+    irq_add(II_TIMER0, gba_link_timer_isr);
+    REG_TM0CNT_H = TM_ENABLE | TM_FREQ_1024 | TM_IRQ;
+
     REG_TM2CNT_H = TM_ENABLE | TM_IRQ;
 }
 

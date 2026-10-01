@@ -78,10 +78,10 @@ void emu_sound_update(void) {
  * The original ROM link routines are consumed at their entry points. Their
  * logical messages are then transported by native GBA multiplayer SIO.
  */
-#define LINK_ROM_SEND      0xBE0A
+#define LINK_ROM_SEND      0xBE0D  /* after wait_melody */
 #define LINK_ROM_RECV      0xBE41
-#define LINK_ROM_EXCHANGE  0xBDB4
-#define LINK_ROM_ANSWER    0xBA91
+#define LINK_ROM_EXCHANGE  0xBDB7  /* after wait_melody */
+#define LINK_ROM_ANSWER    0xBA99  /* PA5 has just been driven low */
 #define LINK_RAM_TMPCOUNT  0xAE
 #define LINK_RAM_EDGES     0xB4
 #define LINK_RAM_STATE     0xB5
@@ -113,8 +113,9 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
 
     if (pc == LINK_ROM_EXCHANGE) {
         /*
-         * BDB4 duplicates link_send inline and then executes JSR link_recv at
-         * BDEC. It is used by the game-selection path, so bypass only the wire
+         * BDB4 duplicates link_send inline. We enter here at BDB7, after its
+         * wait_melody, and then resume at JSR link_recv at BDEC. It is used by
+         * the game-selection path, so bypass only the wire
          * send portion and resume at the real receive call. Keeping the
          * caller's JSR frame intact lets the ROM perform its own post-receive
          * validation and RTS.
@@ -132,6 +133,7 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
         splb20_write(c, 0xB8, (uint8_t)(flags_b8 & 0xF7));
         splb20_write(c, LINK_PA_DIR, 0x3F);
         splb20_write(c, LINK_PA_DATA, 0xFF);
+        splb20_write(c, LINK_INT_CFG, 0x00);
         c->pc = 0xBDEC;
         return SPLB20_HOOK_CONSUME;
     }

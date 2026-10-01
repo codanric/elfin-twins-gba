@@ -84,6 +84,25 @@ jobs:
           sudo apt-get install -y -qq \
             xvfb libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0
           "$MGBA_QT" --version
+          "$MGBA_QT" --help >/tmp/mgba-help.txt 2>&1 || true
+          cat /tmp/mgba-help.txt
+          grep -q -- '--script' /tmp/mgba-help.txt
+
+          rm -f /tmp/mgba-probe-*.txt /tmp/mgba-probe-*.png /tmp/mgba-script-trace.txt
+          set +e
+          timeout 6s xvfb-run -a "$MGBA_QT" \
+            --script "$GITHUB_WORKSPACE/gba/host/mgba_link_probe.lua" \
+            "$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.gba" \
+            >/tmp/mgba-single.log 2>&1
+          single_rc=$?
+          set -e
+          if [ "$single_rc" -ne 0 ] && [ "$single_rc" -ne 124 ]; then
+            cat /tmp/mgba-single.log
+            exit "$single_rc"
+          fi
+          cat /tmp/mgba-single.log || true
+          test -s /tmp/mgba-script-trace.txt
+          cp /tmp/mgba-script-trace.txt /tmp/mgba-single-trace.txt
 
           rm -f /tmp/mgba-probe-*.txt /tmp/mgba-probe-*.png /tmp/mgba-script-trace.txt
           set +e
@@ -135,6 +154,9 @@ jobs:
           name: mgba-multiplayer-evidence
           if-no-files-found: warn
           path: |
+            /tmp/mgba-help.txt
+            /tmp/mgba-single.log
+            /tmp/mgba-single-trace.txt
             /tmp/mgba.log
             /tmp/mgba-script-trace.txt
             /tmp/mgba-probe-*.txt

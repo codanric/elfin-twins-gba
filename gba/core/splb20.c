@@ -370,8 +370,21 @@ void splb20_init(splb20_t *c, const uint8_t *rom, uint32_t rom_size,
     c->snd_tc_div = 1;
     c->snd_clock_div = 1;
     c->timer_warp = 1;
+    c->pc_hook = 0;
+    c->pc_hook_user = 0;
     scan_loops(c);
     splb20_reset(c);
+}
+
+void splb20_set_pc_hook(splb20_t *c, splb20_pc_hook_t hook, void *user) {
+    c->pc_hook = hook;
+    c->pc_hook_user = user;
+}
+
+void splb20_return_from_subroutine(splb20_t *c) {
+    uint16_t ret = pull(c);
+    ret |= (uint16_t)pull(c) << 8;
+    c->pc = (uint16_t)(ret + 1);
 }
 
 void splb20_reset(splb20_t *c) {
@@ -684,6 +697,22 @@ static inline __attribute__((always_inline)) int execute(splb20_t *c, uint8_t op
 
 int32_t SPLB20_FAST splb20_step(splb20_t *c) {
     int32_t exec = MCLOCK_DIV_FP;
+
+    /*
+     * A hardware-backed subroutine can be consumed without executing the
+     * original timing-sensitive implementation. This is used only for the
+     * Elfin PA5 link routines on GBA; the host core leaves the hook unset.
+     */
+    if (c->rosc_enbl && c->cpu_enbl && c->pc_hook) {
+        int action = c->pc_hook(c, c->pc, c->pc_hook_user);
+        if (action == SPLB20_HOOK_CONSUME || action == SPLB20_HOOK_WAIT) {
+            int cycles = action == SPLB20_HOOK_WAIT ? 8 : 6;
+            exec = cycles << SPLB20_FP;
+            timers_clock(c, exec);
+            c->io_written = 0;
+            return exec;
+        }
+    }
     if (c->rosc_enbl) {
         if (c->cpu_enbl) {
             uint8_t opcode = rom_byte(c, c->pc);

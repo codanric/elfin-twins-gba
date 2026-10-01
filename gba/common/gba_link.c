@@ -1,8 +1,6 @@
 #include "gba_link.h"
 #include <string.h>
 
-#define LINK_TIMER_TICKS        50   /* 3.05 ms at Timer /1024 */
-
 static uint16_t make_frame(uint16_t type, uint8_t seq, uint8_t value) {
     return (uint16_t)(ELINK_MAGIC | type |
                       ((uint16_t)(seq & 0x0F) << 4) |

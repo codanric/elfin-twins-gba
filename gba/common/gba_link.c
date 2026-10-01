@@ -15,6 +15,7 @@
 #include "gba_link.h"
 
 #define POLL_INTERVAL_TICKS 6 /* 6 * 488 us ~= 2.93 ms */
+#define GBA_SIO_ERROR 0x0040
 
 static uint16_t frame_make(uint8_t edges) {
     return (uint16_t)(ELINK_FRAME_MAGIC | ELINK_FRAME_EDGE | edges);
@@ -85,6 +86,13 @@ void gba_link_service(gba_link_t *l) {
 
     if (!l->enabled) {
         l->ready = 0;
+        return;
+    }
+
+    if (cnt & GBA_SIO_ERROR) {
+        uint8_t enabled = l->enabled;
+        gba_link_init(l);
+        l->enabled = enabled;
         return;
     }
 

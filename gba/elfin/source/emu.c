@@ -148,6 +148,10 @@ static void emu_link_timer_isr(void) {
     gba_link_service(&cable_link);
 }
 
+static void emu_link_serial_isr(void) {
+    gba_link_on_serial(&cable_link);
+}
+
 static inline void emu_link_apply_input(void) {
     /* A native DATA frame corresponds to the original falling PA5 wake edge. */
     if (gba_link_wake_pending(&cable_link)) {
@@ -233,11 +237,11 @@ void emu_start(void) {
     REG_TM2CNT_L = (u16)(65536 - (16777216 / EMU_IRQ_HZ));
     irq_add(II_TIMER2, emu_isr);
 
-    /* Native SIO: poll much faster than the 38,400-bps 16-bit transfer time. */
+    /* Native SIO parent pacing timer. Completion is handled by SERIAL IRQ. */
     REG_TM0CNT_H = 0;
-    REG_TM0CNT_L = 0xFFFF;
+    REG_TM0CNT_L = (u16)(65536 - 50); /* 3.05 ms between parent starts */
     irq_add(II_TIMER0, emu_link_timer_isr);
-    REG_TM0CNT_H = TM_ENABLE | TM_FREQ_1024 | TM_IRQ;
+    irq_set(II_SERIAL, emu_link_serial_isr, ISR_PRIO(0) | ISR_REPLACE);
 
     REG_TM2CNT_H = TM_ENABLE | TM_IRQ;
 }
@@ -248,7 +252,9 @@ void emu_stop(void) {
     REG_TM0CNT_H = 0;
     irq_delete(II_TIMER2);
     irq_delete(II_TIMER0);
+    irq_delete(II_SERIAL);
     gba_link_set_enabled(&cable_link, 0);
 }
 
 void gba_link_timer_isr(void) __attribute__((long_call));
+void emu_link_serial_isr(void) __attribute__((long_call));

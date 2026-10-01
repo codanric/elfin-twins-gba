@@ -15,6 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Test SPLB20 link hook dispatch
+        run: python3 gba/host/test_pc_hook_fastpath.py
+
       - name: Build with devkitARM
         run: |
           docker run --rm \

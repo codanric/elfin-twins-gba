@@ -41,6 +41,7 @@ extern volatile uint32_t emu_link_edges_rx;
 extern volatile uint32_t emu_link_edges_tx;
 extern volatile uint32_t emu_link_hook_send;
 extern volatile uint32_t emu_link_hook_recv;
+extern volatile uint32_t emu_link_hook_exchange;
 extern volatile uint32_t emu_link_hook_answer;
 extern volatile uint32_t emu_link_sio_errors;
 extern volatile uint16_t emu_link_sio;
@@ -52,7 +53,7 @@ extern volatile uint8_t emu_link_peer_seen;
 extern volatile uint8_t emu_link_ok;
 
 void emu_init(void);
-void emu_start(void);         /* start the 4096 Hz interrupt */
+void emu_start(void);         /* start the 2048 Hz interrupt */
 void emu_stop(void);          /* stop it (for save / catch-up / reset) */
 void emu_sound_update(void);  /* push the buzzer state to the sound chip */
 void emu_sound_silence(void);

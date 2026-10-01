@@ -140,7 +140,8 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
     }
 
     if (pc == LINK_ROM_ANSWER) {
-        /* BA91 is the one special answer pulse: receiver counts one edge. */
+        /* BA91 is the special responder pulse: it wakes the caller, but the
+         * caller's wake path does not invoke link_recv for this pulse. */
         uint8_t state = splb20_read(c, LINK_RAM_STATE);
         if (state != 4)
             l->answer_armed = 0;

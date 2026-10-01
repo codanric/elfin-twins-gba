@@ -34,7 +34,7 @@ extern "C" {
 
 void elfin_link_reset(elfin_link_t *l);
 void elfin_link_before(elfin_link_t *l, splb20_t *c, int pin_low);
-int elfin_link_after(elfin_link_t *l, splb20_t *c);
+int elfin_link_after(elfin_link_t *l, splb20_t *c, int pin_low);
 
 #ifdef __cplusplus
 }

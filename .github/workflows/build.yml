@@ -21,6 +21,13 @@ jobs:
       - name: Test Elfin logical link flow
         run: python3 gba/host/test_native_link_flow.py
 
+      - name: Test native link transport
+        run: |
+          gcc -O2 -Wall -Wextra -std=gnu11 \
+            gba/host/test_gba_link_protocol.c gba/common/gba_link.c \
+            -o /tmp/test_gba_link_protocol
+          /tmp/test_gba_link_protocol
+
       - name: Build with devkitARM
         run: |
           docker run --rm \

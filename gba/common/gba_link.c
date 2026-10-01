@@ -247,16 +247,35 @@ void gba_link_service(gba_link_t *l) {
         }
     }
 
-    if (!l->parent)
+    /*
+     * A missed SERIAL IRQ must not permanently wedge the session. If the
+     * hardware is no longer BUSY, recover the completed transfer here.
+     */
+    if (l->transfer_active && !(cnt & GBA_SIO_START))
+        gba_link_on_serial(l);
+
+    if (!l->parent) {
+        /*
+         * Slave fallback: poll the received word as well. Re-processing the
+         * same DATA is harmless because sequence numbers make duplicates
+         * idempotent, and it re-arms the ACK if the SERIAL IRQ was lost.
+         */
+        handle_rx(l, GBA_REG_SIOMULTI0);
+        {
+            uint16_t next = make_next_tx(l);
+            GBA_REG_SIOMLT_SEND = next;
+            l->last_tx_word = next;
+        }
         return;
+    }
 
     if (l->transfer_active)
         return;
 
     /*
-     * Nintendo's own programmer documentation requires a guard interval
-     * between multiplayer transfers; 7.8 ms is deliberately much longer than
-     * the minimum while still making the game feel immediate.
+     * Nintendo's own programmer documentation uses a guard interval between
+     * multiplayer transfers. 3.05 ms matches the interval used by established
+     * real-hardware GBA link implementations at 38.4 kbps.
      */
     uint16_t word = make_next_tx(l);
     GBA_REG_SIOMLT_SEND = word;

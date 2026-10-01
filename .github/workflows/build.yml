@@ -85,7 +85,7 @@ jobs:
             xvfb libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0
           "$MGBA_QT" --version
 
-          rm -f /tmp/mgba-probe-*.txt /tmp/mgba-probe-*.png
+          rm -f /tmp/mgba-probe-*.txt /tmp/mgba-probe-*.png /tmp/mgba-script-trace.txt
           set +e
           timeout 20s xvfb-run -a "$MGBA_QT" \
             --script "$GITHUB_WORKSPACE/gba/host/mgba_link_probe.lua" \
@@ -129,11 +129,14 @@ jobs:
           PY
 
       - name: Upload mGBA evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mgba-multiplayer-evidence
+          if-no-files-found: warn
           path: |
             /tmp/mgba.log
+            /tmp/mgba-script-trace.txt
             /tmp/mgba-probe-*.txt
             /tmp/mgba-probe-*.png
 

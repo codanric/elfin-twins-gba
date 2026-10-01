@@ -780,8 +780,8 @@ static int32_t next_event(const splb20_t *c) {
 static inline __attribute__((always_inline)) int pc_hook_trap(const splb20_t *c) {
     if (!c->pc_hook)
         return 0;
-    return c->pc == 0xBE0A || c->pc == 0xBE41 ||
-           c->pc == 0xBDB4 || c->pc == 0xBA91;
+    return c->pc == 0xBE0D || c->pc == 0xBE41 ||
+           c->pc == 0xBDB7 || c->pc == 0xBA99;
 }
 
 int32_t SPLB20_FAST splb20_run(splb20_t *c, int32_t budget_fp) {

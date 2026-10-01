@@ -450,24 +450,26 @@
 <!-- ================================================================ LINK -->
 <section class="page">
   <h2>18. Playing with a friend (link)</h2>
-  <p>Two Elfin Twins can be connected with a link cable, so the twins can play against a friend's twins.
-    The toy calls this "linking", and the Link icon shows two figures joined by an arc.</p>
+  <p>Two Elfin Twins can be connected with a link cable so the twins can play against a friend's twins.
+    Link is available as soon as the opening story and name setup are finished and the twins are back on the
+    normal home screen; there is no age or growth-stage requirement. The <b>?!</b> icon does not block Link.
+    If you want to clear the newborn hunger/thirst call first, give at least one meal and one drink.</p>
   <ol class="steps">
     <li>Connect the two toys (or two Game Boy Advance systems, see chapter 21).</li>
-    <li>On <b>one</b> toy, open the <b>Link</b> icon and press <span class="key">ENTER</span>. It calls the other toy.</li>
-    <li>The other toy answers <b>by itself</b> and both show the link screen.</li>
-    <li>On the calling toy choose a game with <span class="key">◄</span>/<span class="key">►</span> and press <span class="key">ENTER</span>. Both toys play it together.</li>
-    <li>After a game the link screen comes back. Choose another, or press <span class="key">ESC</span> to end.</li>
+    <li>Leave both on the normal home screen. On <b>one</b> unit, open <b>Link</b> and press <span class="key">ENTER</span>.</li>
+    <li>The other unit answers <b>by itself</b> and both show the link screen.</li>
+    <li>On the calling unit choose a game with <span class="key">◄</span>/<span class="key">►</span> and press <span class="key">ENTER</span>. Both units enter the same game.</li>
+    <li>After a game the link screen returns. Choose another game, or press <span class="key">ESC</span> to disconnect.</li>
   </ol>
   <figure><img src="../img/link_menu.png"><figcaption>Tug-of-war · Rock-paper-scissors · Arm wrestling.</figcaption></figure>
   <div class="two">
     <figure><img src="../img/link_game_a.png"><figcaption>Tug-of-war on the calling toy…</figcaption></figure>
     <figure><img src="../img/link_game_b.png"><figcaption>…and on the friend's toy at the same time.</figcaption></figure>
   </div>
-  <p>Playing together raises <span class="chip up">+ IQ</span> <span class="chip up">+ stamina</span>
-    <span class="chip up">+ friendship</span>. A score such as "0 vs 0" is kept for the session.</p>
-  <p class="small">If the other toy does not answer within a few seconds, the calling toy gives up and goes back
-    home. Try again once both toys are on the home screen.</p>
+  <p>Results affect the twins' care stats. Winning can raise IQ, stamina and friendship; losing can lower
+    some stats. A score such as "0 vs 0" is kept for the current link session.</p>
+  <p class="small">If a connection fails, put both units back on the normal home screen, make sure neither is
+    asleep or setting/stopping the clock, and try again.</p>
 </section>
 
 <!-- ================================================================ CLOCK / SOUND / PW -->
@@ -511,8 +513,8 @@
 <section class="page">
   <h2>21. Game Boy Advance edition</h2>
   <p>The GBA edition runs the <b>original program</b> of the toy on an emulated copy of its microcontroller, so the
-    twins behave exactly as on the real toy. It adds saving, living on while the GBA is off, a settings
-    menu and the link cable.</p>
+    twins behave as on the real toy. It adds saving, living on while the GBA is off, a settings
+    menu and native GBA link-cable multiplayer.</p>
   <div class="two">
     <figure><img src="../img/gba_home.png"><figcaption>On the GBA screen.</figcaption></figure>
     <figure><img src="../img/gba_menu.png"><figcaption>START opens the settings.</figcaption></figure>
@@ -538,7 +540,7 @@
   <table>
     <tr><th style="width:32%">Setting</th><th>What it does</th></tr>
     <tr><td>Sound</td><td>Buzzer on or off.</td></tr>
-    <tr><td>Link cable</td><td>Which wire of the GBA link cable is used (<b>SD</b>, <b>SC</b>) or off.</td></tr>
+    <tr><td>Link cable</td><td><b>GBA cable</b> enables native GBA multiplayer; <b>off</b> disables linking.</td></tr>
     <tr><td>Time while off</td><td><b>real time</b> (the twins live on), <b>max 1 day</b>, or <b>paused</b> (nothing happens while off).</td></tr>
     <tr><td>Pet clock = RTC</td><td><b>auto</b> sets the toy's clock from the cartridge clock at every start, so you never set it by hand.</td></tr>
     <tr><td>LCD fade</td><td>Off by default. When on, the dots fade in and out softly, like a slow LCD. The toy's program only draws plain on/off dots, so this is purely for looks.</td></tr>
@@ -550,27 +552,25 @@
 
 <section class="page">
   <h2>Game Boy Advance edition: link cable</h2>
+  <p>The current GBA port uses the console's <b>native multiplayer SIO mode</b>. The original Elfin pulse-count
+    messages are carried as small logical messages over the GBA cable; no GPIO wire selection is needed.</p>
   <ol class="steps">
-    <li>Put <b>elfin-twins.gba</b> on both flashcarts and connect the GBAs with a GBA link cable.</li>
-    <li>Leave <b>Link cable</b> on <b>SD wire</b> on both, and play as in chapter 18.</li>
-    <li>If the other GBA never answers, run <b>elfin-linktest.gba</b> on both first (next section). If it reports
-      "SD idles LOW", switch both games to <b>SC wire</b>.</li>
+    <li>Put the same current <b>elfin-twins.gba</b> on both flashcarts and connect the GBAs with a standard GBA link cable.</li>
+    <li>In settings, leave <b>Link cable</b> on <b>GBA cable</b> on both systems.</li>
+    <li>Leave both games on the normal home screen, then connect exactly as described in chapter 18.</li>
   </ol>
-  <h3>The link and clock test (elfin-linktest.gba)</h3>
-  <p>A small test program for your hardware. Run it on both GBAs with the cable connected:</p>
-  <ul>
-    <li><b>SD / SC idle HIGH</b>: the wire can be used.</li>
-    <li>Press <span class="key gba">L</span> on one GBA: the other should report a <b>burst of 12 edges</b> on SD.
-      <span class="key gba">R</span> does the same on SC.</li>
-    <li><span class="key gba">A</span> / <span class="key gba">B</span> hold SD / SC low: the level shown on the other GBA should change.</li>
-    <li><b>RTC</b> shows the date and time and should keep ticking. "NOT FOUND" means the flashcart's clock is
-      switched off for this game in the loader menu.</li>
-  </ul>
+  <div class="tip"><b>Hardware tested:</b> the native link handshake, game selection and linked play have been
+    verified on two real GBAs.</div>
+  <h3>About elfin-linktest.gba</h3>
+  <p><b>elfin-linktest.gba</b> is a legacy GPIO/RTC diagnostic from the earlier link experiment. It is useful for
+    hardware investigation, but it does <b>not</b> exercise the current native multiplayer transport and is not required
+    for normal linking.</p>
   <h3>Troubleshooting</h3>
   <table>
     <tr><th style="width:36%">Problem</th><th>Try this</th></tr>
+    <tr><td>The other GBA never answers</td><td>Use the same current ROM on both systems, check the GBA cable, make sure Link is enabled, and leave both pets on the normal home screen before calling.</td></tr>
+    <tr><td>One side becomes extremely slow or freezes when a game is selected</td><td>Use the current build. Older native-link test builds could stall while waiting for a serial transfer; the current build yields that wait to the GBA serial/VBlank interrupts.</td></tr>
     <tr><td>No time passes while off</td><td>Turn on the RTC for this game in the flashcart menu. Check "Time while off".</td></tr>
-    <tr><td>"no pull-up seen" in the menu</td><td>Nothing seems to be connected, or the wire doesn't idle high. Check the cable, then try SC.</td></tr>
     <tr><td>The pet is not saved</td><td>Use SRAM saving for this game in the flashcart menu. Some flashcarts only write the save to the SD card at the next start.</td></tr>
     <tr><td>The pet clock is wrong</td><td>Set the cartridge clock (settings), and use "Pet clock = RTC: auto".</td></tr>
   </table>

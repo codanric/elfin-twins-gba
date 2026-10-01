@@ -75,9 +75,18 @@ int save_load(splb20_t *cpu, settings_t *settings, uint32_t *rtc_secs) {
     if (best < 0)
         return 0;
     slot_valid(best, &h[best], buf);
+    /*
+     * ROM and hook pointers are runtime bindings, not emulated machine state.
+     * Saves from another ROM build may contain perfectly valid CPU/RAM state
+     * but stale code/data addresses for these fields.
+     */
     const uint8_t *rom = cpu->rom;
+    splb20_pc_hook_t pc_hook = cpu->pc_hook;
+    void *pc_hook_user = cpu->pc_hook_user;
     memcpy(cpu, buf, sizeof(splb20_t));
     cpu->rom = rom;
+    cpu->pc_hook = pc_hook;
+    cpu->pc_hook_user = pc_hook_user;
     *settings = h[best].settings;
     *rtc_secs = h[best].rtc_secs;
     last_seq = h[best].seq;

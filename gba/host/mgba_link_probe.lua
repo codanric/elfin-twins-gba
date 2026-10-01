@@ -2,6 +2,13 @@
 -- Loaded into both mGBA windows. Reads the actual link-test ROM's gba_link_t
 -- from IWRAM, injects A on the parent, and writes one report per player.
 
+do
+    local f = assert(io.open("/tmp/mgba-script-trace.txt", "a"))
+    f:write("loaded\n")
+    f:close()
+    print("ELFIN_PROBE_LOADED")
+end
+
 local function envnum(name, base)
     local s = os.getenv(name)
     if not s then error("missing env "..name) end
@@ -18,12 +25,6 @@ local off_errors = envnum("OFF_ERRORS")
 
 local frame = 0
 local pressed = false
-
-do
-    local f = assert(io.open("/tmp/mgba-script-trace.txt", "a"))
-    f:write("loaded title=" .. emu:getGameTitle() .. "\n")
-    f:close()
-end
 
 callbacks:add("frame", function()
     frame = frame + 1

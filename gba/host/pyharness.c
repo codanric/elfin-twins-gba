@@ -12,6 +12,13 @@ typedef struct {
     splb20_t cpu;
     uint8_t rom[0x10000];
     elfin_link_t link;
+
+    /* Host-only logical transport used to exercise the same ROM-side
+     * DATA/WAKE mapping as the native GBA build. */
+    uint8_t native_tx[16], native_tx_head, native_tx_len;
+    uint8_t native_rx[16], native_rx_head, native_rx_len;
+    uint8_t native_wake_pending, native_wake_delivered, native_wake_only;
+    uint8_t native_recv_armed;
 } harness_t;
 
 harness_t *h_create(const uint8_t *rom, uint32_t size, uint32_t clock_hz,
@@ -154,6 +161,163 @@ int h_run_traced(harness_t *h, int32_t cycles, uint16_t *out, int max) {
         budget -= splb20_step(c);
     }
     return n;
+}
+
+/* ------------------------------------------------------------------
+ * Logical/native link simulation.
+ *
+ * Event byte 0x80 is the BA91 wake-only pulse. Other values are the edge
+ * count delivered to link_recv. This intentionally has no GBA SIO layer:
+ * it verifies the ROM/hook state machine independently from the hardware
+ * transport tested by the link-test ROM.
+ */
+#define HN_WAKE 0x80
+#define HN_SEND_PC 0xBE0D
+#define HN_RECV_PC 0xBE41
+#define HN_EXCHANGE_PC 0xBDB7
+#define HN_ANSWER_PC 0xBA99
+#define HN_PA5 0x20
+
+static int hn_push(uint8_t *q, uint8_t *head, uint8_t *len, uint8_t v) {
+    if (*len >= 16)
+        return 0;
+    q[(uint8_t)((*head + *len) & 15)] = v;
+    ++*len;
+    return 1;
+}
+static int hn_pop(uint8_t *q, uint8_t *head, uint8_t *len) {
+    int v;
+    if (!*len)
+        return -1;
+    v = q[*head];
+    *head = (uint8_t)((*head + 1) & 15);
+    --*len;
+    return v;
+}
+
+static int h_native_pc_hook(splb20_t *c, uint16_t pc, void *user) {
+    harness_t *h = (harness_t *)user;
+
+    if (pc == HN_SEND_PC) {
+        uint8_t n = splb20_read(c, 0xAE);
+        if (!hn_push(h->native_tx, &h->native_tx_head, &h->native_tx_len,
+                     n ? (uint8_t)(n - 1) : 0))
+            return SPLB20_HOOK_WAIT;
+        splb20_write(c, 0xAE, 0);
+        splb20_write(c, 0xAF, 0xFF);
+        splb20_write(c, 0x71, 0x3F);
+        splb20_write(c, 0x73, 0xFF);
+        splb20_write(c, 0x79, 0x85);
+        splb20_return_from_subroutine(c);
+        return SPLB20_HOOK_CONSUME;
+    }
+
+    if (pc == HN_EXCHANGE_PC) {
+        uint8_t n = splb20_read(c, 0xAE);
+        uint8_t b8;
+        if (!hn_push(h->native_tx, &h->native_tx_head, &h->native_tx_len,
+                     n ? (uint8_t)(n - 1) : 0))
+            return SPLB20_HOOK_WAIT;
+        splb20_write(c, 0xAE, 0);
+        b8 = splb20_read(c, 0xB8);
+        splb20_write(c, 0xB8, (uint8_t)(b8 & 0xF7));
+        splb20_write(c, 0x71, 0x3F);
+        splb20_write(c, 0x73, 0xFF);
+        splb20_write(c, 0x79, 0x00);
+        c->pc = 0xBDEC;
+        return SPLB20_HOOK_CONSUME;
+    }
+
+    if (pc == HN_RECV_PC) {
+        int v;
+        if (!h->native_recv_armed) {
+            splb20_write(c, 0x71, 0x3F);
+            splb20_write(c, 0x73, 0xFF);
+            splb20_write(c, 0x79, 0x00);
+            splb20_write(c, 0xB4, 0);
+            splb20_write(c, 0xAF, 0);
+            splb20_write(c, 0xB0, 0);
+            h->native_recv_armed = 1;
+        }
+        v = hn_pop(h->native_rx, &h->native_rx_head, &h->native_rx_len);
+        if (v < 0)
+            return SPLB20_HOOK_WAIT;
+        splb20_write(c, 0xB4, (uint8_t)v);
+        c->in_low &= (uint8_t)~HN_PA5;
+        c->in_high |= HN_PA5;
+        splb20_write(c, 0x79, 0x85);
+        h->native_recv_armed = 0;
+        if (!h->native_rx_len)
+            h->native_wake_pending = 0;
+        else {
+            h->native_wake_pending = 1;
+            h->native_wake_delivered = 0;
+        }
+        splb20_return_from_subroutine(c);
+        return SPLB20_HOOK_CONSUME;
+    }
+
+    if (pc == HN_ANSWER_PC && splb20_read(c, 0xB5) == 4) {
+        if (!hn_push(h->native_tx, &h->native_tx_head, &h->native_tx_len, HN_WAKE))
+            return SPLB20_HOOK_WAIT;
+    }
+    return SPLB20_HOOK_NONE;
+}
+
+void h_native_enable(harness_t *h) {
+    h->native_tx_head = h->native_tx_len = 0;
+    h->native_rx_head = h->native_rx_len = 0;
+    h->native_wake_pending = h->native_wake_delivered = 0;
+    h->native_wake_only = h->native_recv_armed = 0;
+    splb20_set_pc_hook(&h->cpu, h_native_pc_hook, h);
+}
+
+int h_native_take_tx(harness_t *h) {
+    return hn_pop(h->native_tx, &h->native_tx_head, &h->native_tx_len);
+}
+
+int h_native_feed(harness_t *h, int event) {
+    if (event == HN_WAKE) {
+        h->native_wake_only = 1;
+    } else {
+        if (!hn_push(h->native_rx, &h->native_rx_head, &h->native_rx_len,
+                     (uint8_t)(event & 0x0F)))
+            return 0;
+        h->native_wake_only = 0;
+    }
+    h->native_wake_pending = 1;
+    h->native_wake_delivered = 0;
+    return 1;
+}
+
+int32_t h_native_run(harness_t *h, int32_t budget_fp) {
+    splb20_t *c = &h->cpu;
+    int32_t done;
+
+    if (h->native_wake_pending) {
+        c->in_low |= HN_PA5;
+        c->in_high &= (uint8_t)~HN_PA5;
+    } else {
+        c->in_low &= (uint8_t)~HN_PA5;
+        c->in_high |= HN_PA5;
+    }
+
+    done = splb20_run(c, budget_fp);
+
+    if (h->native_wake_only && h->native_wake_delivered &&
+        !(splb20_read(c, 0xB5) & 0x80)) {
+        h->native_wake_pending = 0;
+        h->native_wake_delivered = 0;
+        h->native_wake_only = 0;
+    }
+
+    if (h->native_wake_pending && !h->native_wake_delivered &&
+        (c->int_cfg & 0x88) == 0x88) {
+        h->native_wake_delivered = 1;
+        splb20_key_irq(c);
+    }
+
+    return done;
 }
 
 /* Link-cable simulation: pins driven low by this core (PA bit 5 = link). */

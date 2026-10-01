@@ -39,7 +39,17 @@ extern volatile uint8_t emu_link_mode;
 /* Link activity counters (for the status indicator). */
 extern volatile uint32_t emu_link_edges_rx;
 extern volatile uint32_t emu_link_edges_tx;
-extern volatile uint8_t emu_link_ok;     /* the wire has been seen high */
+extern volatile uint32_t emu_link_hook_send;
+extern volatile uint32_t emu_link_hook_recv;
+extern volatile uint32_t emu_link_hook_answer;
+extern volatile uint32_t emu_link_sio_errors;
+extern volatile uint16_t emu_link_sio;
+extern volatile uint16_t emu_link_last_rx;
+extern volatile uint16_t emu_link_last_tx;
+extern volatile uint8_t emu_link_parent;
+extern volatile uint8_t emu_link_bus_ready;
+extern volatile uint8_t emu_link_peer_seen;
+extern volatile uint8_t emu_link_ok;
 
 void emu_init(void);
 void emu_start(void);         /* start the 4096 Hz interrupt */

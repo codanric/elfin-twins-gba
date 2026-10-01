@@ -310,16 +310,16 @@ void emu_start(void) {
     REG_TM2CNT_L = (u16)(65536 - (16777216 / EMU_IRQ_HZ));
     irq_add(II_TIMER2, emu_isr);
 
-    /* Native SIO parent pacing timer. Completion is handled by SERIAL IRQ. */
+    /*
+     * Emerald cable pacing: 197 ticks at 16.78 MHz / 64 = about 0.751 ms.
+     * gba_link_service() only asserts START on the physical SIO master; the
+     * SERIAL IRQ performs all receive/send state transitions.
+     */
     REG_TM0CNT_H = 0;
-    REG_TM0CNT_L = (u16)(65536 - 50); /* 3.05 ms between parent starts */
+    REG_TM0CNT_L = (u16)(65536 - 197);
     irq_add(II_TIMER0, emu_link_timer_isr);
     irq_set(II_SERIAL, emu_link_serial_isr, ISR_PRIO(0) | ISR_REPLACE);
-
-    /* 50 ticks at 16.78 MHz / 1024 = 3.052 ms. This timer is the
-     * multiplayer master clock source; configuring TM0CNT_L alone does not
-     * start it. */
-    REG_TM0CNT_H = TM_ENABLE | TM_IRQ | TM_FREQ_1024;
+    REG_TM0CNT_H = TM_ENABLE | TM_IRQ | TM_FREQ_64;
 
     REG_TM2CNT_H = TM_ENABLE | TM_IRQ;
 }

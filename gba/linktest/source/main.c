@@ -38,8 +38,12 @@ static void put(int row, const char *s) {
     tte_write(buf);
 }
 
-static void link_isr(void) {
+static void link_timer_isr(void) {
     gba_link_service(&link);
+}
+
+static void link_serial_isr(void) {
+    gba_link_on_serial(&link);
 }
 
 static void link_reset(void) {

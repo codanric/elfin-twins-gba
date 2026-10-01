@@ -29,13 +29,7 @@ static uint8_t rx_active;
 static uint8_t rx_edges_left;
 static uint8_t rx_hold;
 
-/* A wire that has never been seen high (no cable pull-up, nothing plugged
- * in on some setups) or that stays low far longer than the protocol ever
- * holds it (~3 s) is ignored until it reads high again. */
-#define LINK_STUCK_SLICES (10 * EMU_IRQ_HZ)
-static uint8_t link_stuck = 1;
-static uint32_t link_low_run;
-volatile uint8_t emu_link_ok;      /* wire seen high: cable usable */
+volatile uint8_t emu_link_ok;      /* GBA SIO cable reports ready */
 /* Pacing: Timer 3 runs freely at 16.78 MHz / 64 = 262144 Hz. Each interrupt
  * runs the emulated cycles for the real time that has passed since the
  * previous one (560000 / 262144 = 4375/2048 cycles = 4375/8 fp8 per tick),

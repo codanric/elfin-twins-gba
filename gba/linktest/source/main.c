@@ -71,8 +71,8 @@ int main(void) {
     /* Parent pacing timer; transfer completion is caught by SERIAL IRQ. */
     REG_TM0CNT_H = 0;
     REG_TM0CNT_L = (u16)(65536 - 50);
-    irq_add(II_TIMER0, link_isr);
-    irq_set(II_SERIAL, link_isr, ISR_PRIO(0) | ISR_REPLACE);
+    irq_add(II_TIMER0, link_timer_isr);
+    irq_set(II_SERIAL, link_serial_isr, ISR_PRIO(0) | ISR_REPLACE);
 
     rtc_result = rtc_init();
     rtc_time_t t0;

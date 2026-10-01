@@ -1,20 +1,22 @@
 /*
- * Host regressions for the production Emerald-style gba_link.c.
+ * Host regression tests for gba/common/gba_link.c.
  *
- * Linux maps a scratch page at the GBA MMIO address so the real transport
- * implementation can be tested without a test-only register abstraction.
+ * Linux can map a scratch page at the GBA MMIO address, so the production
+ * transport runs unchanged. These tests model completed multiplayer transfers
+ * by writing the same SIOCNT/SIOMULTI state the GBA hardware exposes.
  */
 #define _GNU_SOURCE
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 
 #include "../common/gba_link.h"
 
 #define MMIO_PAGE ((void *)0x04000000u)
-#define MMIO_SIZE 0x2000u
+#define MMIO_SIZE 0x3000u
 
 static int failures;
 
@@ -29,124 +31,174 @@ static void clear_mmio(void) {
     memset(MMIO_PAGE, 0, MMIO_SIZE);
 }
 
-static uint16_t base_sio(void) {
-    return GBA_SIO_MULTI | GBA_SIO_BAUD_115200 | GBA_SIO_IRQ;
+/* Physical master: SD=1, SI=0, multiplayer ID=0. */
+static void set_master_bus(uint16_t extra) {
+    GBA_REG_SIOCNT = GBA_SIO_MULTI | GBA_SIO_BAUD_115200 |
+                     GBA_SIO_IRQ | GBA_SIO_MULTI_SD | extra;
 }
 
-static void test_init_and_master_start(void) {
+/* First child: SD=1, SI=1, multiplayer ID=1. */
+static void set_child_bus(uint16_t extra) {
+    GBA_REG_SIOCNT = GBA_SIO_MULTI | GBA_SIO_BAUD_115200 |
+                     GBA_SIO_IRQ | GBA_SIO_MULTI_SD | GBA_SIO_MULTI_SI |
+                     0x0010 | extra;
+}
+
+static void test_hardware_init_and_role(void) {
     gba_link_t l;
     clear_mmio();
     gba_link_init(&l);
     gba_link_set_enabled(&l, 1);
 
-    CHECK(GBA_REG_RCNT == 0, "RCNT enters serial mode");
-    CHECK((GBA_REG_SIOCNT & (GBA_SIO_MULTI | 3 | GBA_SIO_IRQ)) == base_sio(),
-          "SIO initializes multiplayer 115200 + IRQ");
+    CHECK(GBA_REG_RCNT == 0, "RCNT enters serial/multiplayer mode");
+    CHECK(GBA_REG_SIOCNT ==
+          (GBA_SIO_MULTI | GBA_SIO_BAUD_115200 | GBA_SIO_IRQ),
+          "SIOCNT initialized to multiplayer 115200 + SERIAL IRQ");
     CHECK(GBA_REG_SIOMLT_SEND == ELINK_HELLO,
           "HELLO is preloaded before first transfer");
 
-    /* Emerald master condition: SD=1, SI=0, ID=0. */
-    GBA_REG_SIOCNT = base_sio() | GBA_SIO_MULTI_SD;
+    set_master_bus(0);
     gba_link_service(&l);
-    CHECK(l.parent == 1, "SD/SI + ID identify hardware master");
+    CHECK(l.parent == 1, "SD=1 SI=0 ID0 is hardware master");
+    CHECK(l.local_id == 0, "master has player ID 0");
     CHECK((GBA_REG_SIOCNT & GBA_SIO_START) != 0,
-          "only master pacing asserts START");
+          "hardware master starts transfer");
 
-    /* SI=1/ID1 is a slave and must never assert START itself. */
-    GBA_REG_SIOCNT = base_sio() | GBA_SIO_MULTI_SI | (1u << 4);
+    set_child_bus(0);
     gba_link_service(&l);
-    CHECK(l.parent == 0, "SI/ID1 identifies child");
+    CHECK(l.parent == 0, "ID1/SI child is not hardware master");
+    CHECK(l.local_id == 1, "child samples player ID 1");
     CHECK((GBA_REG_SIOCNT & GBA_SIO_START) == 0,
-          "child does not clock multiplayer bus");
+          "child never starts transfer");
 }
 
-static void test_handshake_then_single_data(void) {
+static void test_hello_then_queued_data(void) {
     gba_link_t l;
     clear_mmio();
     gba_link_init(&l);
     gba_link_set_enabled(&l, 1);
 
-    CHECK(gba_link_send_count(&l, 10), "DATA can queue before peer handshake");
+    CHECK(gba_link_send_count(&l, 10), "DATA queues before peer handshake");
+    CHECK(l.tx_len == 1, "pre-ready DATA remains queued");
+    CHECK(l.tx_word == ELINK_HELLO, "first physical word remains HELLO");
 
-    /* First master transfer: both sides had HELLO preloaded. */
-    GBA_REG_SIOCNT = base_sio() | GBA_SIO_MULTI_SD;
-    GBA_REG_SIOMULTI1 = ELINK_HELLO;
+    /* Master completes first transfer; child slot contains HELLO. */
+    set_master_bus(0);
+    GBA_REG_SIOMULTI0 = ELINK_HELLO; /* our own just-sent word */
+    GBA_REG_SIOMULTI1 = ELINK_HELLO; /* peer */
+    GBA_REG_SIOMULTI2 = 0xFFFF;
+    GBA_REG_SIOMULTI3 = 0xFFFF;
     gba_link_on_serial(&l);
 
-    CHECK(l.peer_seen == 1 && gba_link_is_ready(&l),
-          "peer HELLO establishes logical connection");
-    CHECK(GBA_REG_SIOMLT_SEND == (ELINK_DATA | 10),
-          "queued Elfin DATA is preloaded immediately after HELLO");
+    CHECK(l.peer_seen && l.ready, "peer HELLO establishes logical readiness");
+    CHECK(l.last_rx_word == ELINK_HELLO, "HELLO recorded as last receive");
+    CHECK(l.tx_word == (uint16_t)(ELINK_DATA | 10),
+          "queued DATA preloaded immediately after HELLO completion");
+    CHECK(GBA_REG_SIOMLT_SEND == (uint16_t)(ELINK_DATA | 10),
+          "next hardware transfer is preloaded with DATA");
 
-    /* Next completed transfer sends DATA exactly once, then returns to idle. */
-    GBA_REG_SIOCNT = base_sio() | GBA_SIO_MULTI_SD;
+    /* Complete DATA transfer. Peer is idle; our DATA must count exactly once. */
+    set_master_bus(0);
+    GBA_REG_SIOMULTI0 = (uint16_t)(ELINK_DATA | 10);
     GBA_REG_SIOMULTI1 = ELINK_IDLE;
     gba_link_on_serial(&l);
-    CHECK(l.frames_tx == 1, "DATA completion counted once");
-    CHECK(GBA_REG_SIOMLT_SEND == ELINK_IDLE,
-          "sender returns to idle instead of retransmitting/awaiting ACK");
+    CHECK(l.frames_tx == 1, "DATA completion counted exactly once");
+    CHECK(l.last_tx_word == (uint16_t)(ELINK_DATA | 10),
+          "last TX records completed DATA");
+    CHECK(l.tx_word == ELINK_IDLE, "no queued event preloads IDLE");
 
-    GBA_REG_SIOCNT = base_sio() | GBA_SIO_MULTI_SD;
+    set_master_bus(0);
+    GBA_REG_SIOMULTI0 = ELINK_IDLE;
     GBA_REG_SIOMULTI1 = ELINK_IDLE;
     gba_link_on_serial(&l);
-    CHECK(l.frames_tx == 1, "idle transfer cannot duplicate previous DATA");
+    CHECK(l.frames_tx == 1, "later IDLE transfer does not recount DATA");
 }
 
-static void test_child_receive_and_wake(void) {
+static void test_receive_data_and_wake(void) {
     gba_link_t l;
     uint8_t value = 0xFF;
     clear_mmio();
     gba_link_init(&l);
     gba_link_set_enabled(&l, 1);
 
-    /* Child ID1 receives master's HELLO from slot 0. */
-    GBA_REG_SIOCNT = base_sio() | GBA_SIO_MULTI_SI | (1u << 4);
-    GBA_REG_SIOMULTI0 = ELINK_HELLO;
+    /* Child receives DATA from master slot 0. */
+    set_child_bus(0);
+    GBA_REG_SIOMULTI0 = (uint16_t)(ELINK_DATA | 4);
+    GBA_REG_SIOMULTI1 = ELINK_HELLO; /* own slot, skipped by local_id */
+    GBA_REG_SIOMULTI2 = 0xFFFF;
+    GBA_REG_SIOMULTI3 = 0xFFFF;
     gba_link_on_serial(&l);
-    CHECK(l.local_id == 1 && !l.parent && l.peer_seen,
-          "child consumes master HELLO from SIOMULTI0");
 
-    /* One DATA word produces one queued edge count and one emulated wake. */
-    GBA_REG_SIOCNT = base_sio() | GBA_SIO_MULTI_SI | (1u << 4);
-    GBA_REG_SIOMULTI0 = ELINK_DATA | 4;
-    gba_link_on_serial(&l);
-    CHECK(l.frames_rx == 1, "DATA transfer counted once");
-    CHECK(gba_link_wake_pending(&l), "DATA raises emulated PA5 wake");
-    CHECK(!gba_link_wake_is_only(&l), "DATA wake has receive payload");
+    CHECK(l.peer_seen && l.ready, "received DATA also establishes peer");
+    CHECK(l.frames_rx == 1, "received DATA counted");
+    CHECK(l.rx_len == 1, "received DATA queued for ROM");
+    CHECK(gba_link_line_low(&l), "DATA asserts synthetic PA5 low");
+    CHECK(!gba_link_wake_is_only(&l), "DATA wake is not wake-only");
     CHECK(gba_link_recv_count(&l, &value) && value == 4,
-          "DATA delivers exact Elfin edge count");
-    CHECK(!gba_link_line_low(&l), "consuming last DATA releases virtual line");
+          "ROM consumer receives DATA payload");
+    CHECK(!gba_link_line_low(&l), "consuming final DATA releases PA5");
 
-    /* BA99 responder event is wake-only and never contaminates recv queue. */
-    GBA_REG_SIOCNT = base_sio() | GBA_SIO_MULTI_SI | (1u << 4);
+    /* WAKE is reliable as a hardware word but never enters DATA queue. */
+    set_child_bus(0);
     GBA_REG_SIOMULTI0 = ELINK_WAKE;
+    GBA_REG_SIOMULTI1 = ELINK_IDLE;
     gba_link_on_serial(&l);
-    CHECK(l.frames_rx == 2, "WAKE transfer counted");
-    CHECK(gba_link_wake_pending(&l) && gba_link_wake_is_only(&l),
-          "WAKE is distinguished from DATA");
-    CHECK(!gba_link_recv_count(&l, &value),
-          "WAKE leaves no link_recv payload");
+
+    CHECK(l.frames_rx == 2, "WAKE completion counted");
+    CHECK(l.rx_len == 0, "WAKE does not poison DATA queue");
+    CHECK(gba_link_wake_pending(&l), "WAKE raises emulated interrupt event");
+    CHECK(gba_link_wake_is_only(&l), "WAKE tagged wake-only");
+    CHECK(gba_link_line_low(&l), "WAKE holds synthetic PA5 low");
+
     gba_link_mark_wake_delivered(&l);
-    CHECK(gba_link_line_low(&l),
-          "wake-only line remains low while ROM wake handler runs");
+    CHECK(!gba_link_wake_pending(&l), "delivered WAKE does not retrigger");
+    CHECK(gba_link_line_low(&l), "WAKE remains low for ROM wake handler");
     gba_link_release_wake(&l);
-    CHECK(!gba_link_line_low(&l), "wake-only event releases explicitly");
+    CHECK(!gba_link_line_low(&l), "WAKE releases after ROM handler");
 }
 
-static void test_simultaneous_words_use_player_slots(void) {
+static void test_wake_transmit_once(void) {
     gba_link_t l;
-    uint8_t value;
     clear_mmio();
     gba_link_init(&l);
     gba_link_set_enabled(&l, 1);
 
-    /* Master ID0 must ignore its own slot0 and read the child from slot1. */
-    GBA_REG_SIOCNT = base_sio() | GBA_SIO_MULTI_SD;
-    GBA_REG_SIOMULTI0 = ELINK_DATA | 9; /* own echo; must be ignored */
-    GBA_REG_SIOMULTI1 = ELINK_DATA | 7;
+    CHECK(gba_link_send_wake(&l), "WAKE event queues before handshake");
+
+    /* First completion receives HELLO and preloads queued WAKE. */
+    set_master_bus(0);
+    GBA_REG_SIOMULTI0 = ELINK_HELLO;
+    GBA_REG_SIOMULTI1 = ELINK_HELLO;
     gba_link_on_serial(&l);
-    CHECK(gba_link_recv_count(&l, &value) && value == 7,
-          "master reads peer slot, not own SIOMULTI0 slot");
+    CHECK(l.tx_word == ELINK_WAKE, "queued WAKE becomes next hardware word");
+
+    set_master_bus(0);
+    GBA_REG_SIOMULTI0 = ELINK_WAKE;
+    GBA_REG_SIOMULTI1 = ELINK_IDLE;
+    gba_link_on_serial(&l);
+    CHECK(l.frames_tx == 1, "WAKE completion counted once");
+    CHECK(l.last_tx_word == ELINK_WAKE, "last TX records WAKE");
+    CHECK(l.tx_word == ELINK_IDLE, "WAKE is not retransmitted without requeue");
+}
+
+static void test_sio_error_state(void) {
+    gba_link_t l;
+    clear_mmio();
+    gba_link_init(&l);
+    gba_link_set_enabled(&l, 1);
+
+    l.peer_seen = 1;
+    l.ready = 1;
+    set_master_bus(GBA_SIO_ERROR);
+    GBA_REG_SIOMULTI0 = ELINK_IDLE;
+    GBA_REG_SIOMULTI1 = 0xFFFF;
+    GBA_REG_SIOMULTI2 = 0xFFFF;
+    GBA_REG_SIOMULTI3 = 0xFFFF;
+    gba_link_on_serial(&l);
+
+    CHECK(l.sio_errors == 1, "hardware SIO error is counted");
+    CHECK(!l.peer_seen && !l.ready, "SIO error drops logical peer readiness");
+    CHECK(l.tx_word == ELINK_HELLO, "after error next word re-advertises HELLO");
 }
 
 int main(void) {
@@ -157,15 +209,16 @@ int main(void) {
         return 2;
     }
 
-    test_init_and_master_start();
-    test_handshake_then_single_data();
-    test_child_receive_and_wake();
-    test_simultaneous_words_use_player_slots();
+    test_hardware_init_and_role();
+    test_hello_then_queued_data();
+    test_receive_data_and_wake();
+    test_wake_transmit_once();
+    test_sio_error_state();
 
     munmap(MMIO_PAGE, MMIO_SIZE);
     if (failures)
         return 1;
 
-    puts("PASS: Emerald-style GBA multiplayer transport regressions");
+    puts("PASS: Emerald-style native GBA link transport regressions");
     return 0;
 }

@@ -184,7 +184,10 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
     return SPLB20_HOOK_NONE;
 }
 
-static void emu_link_timer_isr(void) {
+void emu_link_vsync(void) {
+    /* Mirrors Emerald's LinkVSync role: offer one transfer from the hardware
+     * master per video frame. Elfin messages are one word, so no inter-word
+     * pacing timer is needed. */
     gba_link_set_enabled(&cable_link, emu_link_mode != LINK_OFF);
     gba_link_service(&cable_link);
 }
@@ -310,16 +313,8 @@ void emu_start(void) {
     REG_TM2CNT_L = (u16)(65536 - (16777216 / EMU_IRQ_HZ));
     irq_add(II_TIMER2, emu_isr);
 
-    /*
-     * Emerald cable pacing: 197 ticks at 16.78 MHz / 64 = about 0.751 ms.
-     * gba_link_service() only asserts START on the physical SIO master; the
-     * SERIAL IRQ performs all receive/send state transitions.
-     */
-    REG_TM0CNT_H = 0;
-    REG_TM0CNT_L = (u16)(65536 - 197);
-    irq_add(II_TIMER0, emu_link_timer_isr);
+    /* SERIAL IRQ owns transfer completion; VBlank drives master starts. */
     irq_set(II_SERIAL, emu_link_serial_isr, ISR_PRIO(0) | ISR_REPLACE);
-    REG_TM0CNT_H = TM_ENABLE | TM_IRQ | TM_FREQ_64;
 
     REG_TM2CNT_H = TM_ENABLE | TM_IRQ;
 }
@@ -327,9 +322,7 @@ void emu_start(void) {
 void emu_stop(void) {
     REG_TM2CNT_H = 0;
     REG_TM3CNT_H = 0;
-    REG_TM0CNT_H = 0;
     irq_delete(II_TIMER2);
-    irq_delete(II_TIMER0);
     irq_delete(II_SERIAL);
     gba_link_set_enabled(&cable_link, 0);
 }

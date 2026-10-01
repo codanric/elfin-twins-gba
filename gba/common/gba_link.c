@@ -126,8 +126,17 @@ void gba_link_service(gba_link_t *l) {
 
     process_completed(l);
 
-    if (!l->parent)
+    if (!l->parent) {
+        /*
+         * A slave has no clock. Its next word must already be in
+         * SIOMLT_SEND before the parent starts the next transfer.
+         */
+        if (!l->transfer_active && l->tx_count && !l->tx_inflight) {
+            GBA_REG_SIOMLT_SEND = tx_front(l);
+            l->tx_inflight = 1;
+        }
         return;
+    }
 
     if (l->transfer_active)
         return;

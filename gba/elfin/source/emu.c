@@ -18,6 +18,7 @@ volatile uint32_t emu_link_edges_rx;
 volatile uint32_t emu_link_edges_tx;
 volatile uint32_t emu_link_hook_send;
 volatile uint32_t emu_link_hook_recv;
+volatile uint32_t emu_link_hook_exchange;
 volatile uint32_t emu_link_hook_answer;
 volatile uint32_t emu_link_sio_errors;
 volatile uint16_t emu_link_sio;
@@ -126,7 +127,7 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
 
         if (!gba_link_send_count(l, edges))
             return SPLB20_HOOK_WAIT;
-        ++emu_link_hook_send;
+        ++emu_link_hook_exchange;
 
         splb20_write(c, LINK_RAM_TMPCOUNT, 0);
         flags_b8 = splb20_read(c, 0xB8);
@@ -286,6 +287,7 @@ void emu_init(void) {
     emu_link_ok = 0;
     emu_link_hook_send = 0;
     emu_link_hook_recv = 0;
+    emu_link_hook_exchange = 0;
     emu_link_hook_answer = 0;
     emu_link_sio_errors = 0;
     emu_link_sio = 0;

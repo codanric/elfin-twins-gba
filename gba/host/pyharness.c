@@ -19,6 +19,7 @@ typedef struct {
     uint8_t native_rx[16], native_rx_head, native_rx_len;
     uint8_t native_wake_pending, native_wake_delivered, native_wake_only;
     uint8_t native_recv_armed;
+    uint32_t native_send_hits, native_recv_hits, native_exchange_hits, native_wake_hits;
 } harness_t;
 
 harness_t *h_create(const uint8_t *rom, uint32_t size, uint32_t clock_hz,
@@ -200,6 +201,7 @@ static int h_native_pc_hook(splb20_t *c, uint16_t pc, void *user) {
 
     if (pc == HN_SEND_PC) {
         uint8_t n = splb20_read(c, 0xAE);
+        ++h->native_send_hits;
         if (!hn_push(h->native_tx, &h->native_tx_head, &h->native_tx_len,
                      n ? (uint8_t)(n - 1) : 0))
             return SPLB20_HOOK_WAIT;
@@ -214,6 +216,7 @@ static int h_native_pc_hook(splb20_t *c, uint16_t pc, void *user) {
 
     if (pc == HN_EXCHANGE_PC) {
         uint8_t n = splb20_read(c, 0xAE);
+        ++h->native_exchange_hits;
         uint8_t b8;
         if (!hn_push(h->native_tx, &h->native_tx_head, &h->native_tx_len,
                      n ? (uint8_t)(n - 1) : 0))
@@ -230,6 +233,7 @@ static int h_native_pc_hook(splb20_t *c, uint16_t pc, void *user) {
 
     if (pc == HN_RECV_PC) {
         int v;
+        ++h->native_recv_hits;
         if (!h->native_recv_armed) {
             splb20_write(c, 0x71, 0x3F);
             splb20_write(c, 0x73, 0xFF);
@@ -258,6 +262,7 @@ static int h_native_pc_hook(splb20_t *c, uint16_t pc, void *user) {
     }
 
     if (pc == HN_ANSWER_PC && splb20_read(c, 0xB5) == 4) {
+        ++h->native_wake_hits;
         if (!hn_push(h->native_tx, &h->native_tx_head, &h->native_tx_len, HN_WAKE))
             return SPLB20_HOOK_WAIT;
     }
@@ -269,11 +274,20 @@ void h_native_enable(harness_t *h) {
     h->native_rx_head = h->native_rx_len = 0;
     h->native_wake_pending = h->native_wake_delivered = 0;
     h->native_wake_only = h->native_recv_armed = 0;
+    h->native_send_hits = h->native_recv_hits = 0;
+    h->native_exchange_hits = h->native_wake_hits = 0;
     splb20_set_pc_hook(&h->cpu, h_native_pc_hook, h);
 }
 
 int h_native_take_tx(harness_t *h) {
     return hn_pop(h->native_tx, &h->native_tx_head, &h->native_tx_len);
+}
+
+void h_native_hits(harness_t *h, uint32_t *out) {
+    out[0] = h->native_send_hits;
+    out[1] = h->native_recv_hits;
+    out[2] = h->native_exchange_hits;
+    out[3] = h->native_wake_hits;
 }
 
 int h_native_feed(harness_t *h, int event) {

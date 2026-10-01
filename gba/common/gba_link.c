@@ -39,9 +39,10 @@ static uint8_t sio_id(uint16_t cnt) {
  * and local multiplayer ID, not from one bit interpreted as "parent".
  */
 static uint8_t sio_is_master(uint16_t cnt) {
-    return (uint8_t)(((cnt & (GBA_SIO_MULTI_SD | GBA_SIO_MULTI_SI))
-                      == GBA_SIO_MULTI_SD) &&
-                     sio_id(cnt) == 0);
+    /* SI identifies parent/child; SD is bus-ready and is checked separately.
+     * Keeping role independent of SD avoids transiently losing the parent
+     * role while the cable is settling between transfers. */
+    return (uint8_t)((cnt & GBA_SIO_MULTI_SI) == 0 && sio_id(cnt) == 0);
 }
 
 static uint16_t event_word(uint8_t event) {
@@ -190,7 +191,9 @@ void gba_link_service(gba_link_t *l) {
      * Emerald starts transfers only from the physical multiplayer master.
      * If a transfer is already in progress, the timer tick is simply ignored.
      */
-    if (l->parent && !(cnt & GBA_SIO_START))
+    if (l->parent &&
+        (cnt & GBA_SIO_MULTI_SD) &&
+        !(cnt & GBA_SIO_START))
         GBA_REG_SIOCNT |= GBA_SIO_START;
 }
 

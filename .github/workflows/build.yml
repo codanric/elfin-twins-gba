@@ -42,6 +42,39 @@ jobs:
         timeout-minutes: 4
         run: |
           set -euo pipefail
+
+          # Resolve the actual ROM-state addresses from the just-built ELF.
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/work" \
+            -w /work \
+            devkitpro/devkitarm:latest \
+            /bin/bash -lc 'arm-none-eabi-nm -n gba/linktest/build/elfin-linktest.elf' \
+            > /tmp/linktest.nm
+
+          export LINK_BASE=$(awk '$3 == "link" {print $1; exit}' /tmp/linktest.nm)
+          export APP_RX_ADDR=$(awk '$3 == "app_rx_count" {print $1; exit}' /tmp/linktest.nm)
+          export APP_LAST_ADDR=$(awk '$3 == "app_last_count" {print $1; exit}' /tmp/linktest.nm)
+          test -n "$LINK_BASE"
+          test -n "$APP_RX_ADDR"
+          test -n "$APP_LAST_ADDR"
+
+          cat >/tmp/link-layout.c <<'EOF'
+          #include <stddef.h>
+          #include <stdio.h>
+          #include "gba/common/gba_link.h"
+          int main(void) {
+              printf("OFF_READY=%zu\n", offsetof(gba_link_t, ready));
+              printf("OFF_PARENT=%zu\n", offsetof(gba_link_t, parent));
+              printf("OFF_PEER=%zu\n", offsetof(gba_link_t, peer_seen));
+              printf("OFF_FRAMES_RX=%zu\n", offsetof(gba_link_t, frames_rx));
+              printf("OFF_FRAMES_TX=%zu\n", offsetof(gba_link_t, frames_tx));
+              printf("OFF_ERRORS=%zu\n", offsetof(gba_link_t, sio_errors));
+              return 0;
+          }
+          EOF
+          gcc -I. /tmp/link-layout.c -o /tmp/link-layout
+          while IFS='=' read -r k v; do export "$k=$v"; done < <(/tmp/link-layout)
+
           curl -fL --retry 3 \
             https://s3.amazonaws.com/mgba/mGBA-build-latest-appimage-x64.appimage \
             -o /tmp/mgba.appimage
@@ -55,82 +88,58 @@ jobs:
 
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends \
-            xvfb openbox xdotool imagemagick \
-            libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0
+            xvfb libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0
 
           "$MGBA_QT" --version | tee /tmp/mgba-version.txt
+          rm -f /tmp/mgba-probe-*.txt /tmp/mgba-probe-*.png /tmp/mgba-ui.log
 
-          rm -f /tmp/mgba-*.png /tmp/mgba-windows.txt /tmp/mgba-ui.log \
-                /tmp/openbox.log /tmp/xvfb.log
-
-          Xvfb :99 -screen 0 1280x720x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
-          xpid=$!
-          export DISPLAY=:99
-          openbox >/tmp/openbox.log 2>&1 &
-          obpid=$!
-          mpid=
-          cleanup() {
-            if [ -n "${mpid:-}" ]; then kill "$mpid" 2>/dev/null || true; fi
-            kill "$obpid" "$xpid" 2>/dev/null || true
-            wait "$mpid" 2>/dev/null || true
-            wait "$obpid" 2>/dev/null || true
-            wait "$xpid" 2>/dev/null || true
-          }
-          trap cleanup EXIT
-          sleep 1
-
-          "$MGBA_QT" \
+          set +e
+          timeout 10s xvfb-run -a "$MGBA_QT" \
+            --script "$GITHUB_WORKSPACE/gba/host/mgba_link_probe.lua" \
             "$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.gba" \
             "$GITHUB_WORKSPACE/gba/linktest/elfin-linktest.gba" \
-            >/tmp/mgba-ui.log 2>&1 &
-          mpid=$!
+            >/tmp/mgba-ui.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 124 ]; then
+            cat /tmp/mgba-ui.log
+            exit "$rc"
+          fi
 
-          for i in $(seq 1 120); do
-            mapfile -t wins < <(xdotool search --onlyvisible --name "mGBA" 2>/dev/null || true)
-            if [ "${#wins[@]}" -ge 2 ]; then break; fi
-            if ! kill -0 "$mpid" 2>/dev/null; then
-              cat /tmp/mgba-ui.log
-              exit 1
-            fi
-            sleep 0.1
-          done
-
-          : > /tmp/mgba-windows.txt
-          mapfile -t wins < <(xdotool search --onlyvisible --name "mGBA" 2>/dev/null || true)
-          printf "window_count=%d\n" "${#wins[@]}" >> /tmp/mgba-windows.txt
-          [ "${#wins[@]}" -ge 2 ]
-
-          w0="${wins[0]}"
-          w1="${wins[1]}"
-          printf "w0=%s title=%s\n" "$w0" "$(xdotool getwindowname "$w0")" >> /tmp/mgba-windows.txt
-          printf "w1=%s title=%s\n" "$w1" "$(xdotool getwindowname "$w1")" >> /tmp/mgba-windows.txt
-
-          xdotool windowmove "$w0" 20 20
-          xdotool windowsize "$w0" 500 390
-          xdotool windowmove "$w1" 650 20
-          xdotool windowsize "$w1" 500 390
-          sleep 4
-
-          import -window "$w0" /tmp/mgba-player0-before.png
-          import -window "$w1" /tmp/mgba-player1-before.png
-
-          # mGBA default keyboard map: X = GBA A.
-          for w in "$w0" "$w1"; do
-            xdotool keydown --window "$w" x
-            sleep 0.20
-            xdotool keyup --window "$w" x
-          done
-          sleep 3
-
-          import -window "$w0" /tmp/mgba-player0-after.png
-          import -window "$w1" /tmp/mgba-player1-after.png
-          import -window root /tmp/mgba-both-after.png
-
-          test -s /tmp/mgba-player0-after.png
-          test -s /tmp/mgba-player1-after.png
-
-          cat /tmp/mgba-windows.txt
           cat /tmp/mgba-ui.log || true
+          ls -l /tmp/mgba-probe-*.txt /tmp/mgba-probe-*.png
+          cat /tmp/mgba-probe-*.txt
+
+          python3 - <<'PY'
+          import glob
+
+          reports = {}
+          for path in glob.glob('/tmp/mgba-probe-*.txt'):
+              d = {}
+              with open(path) as f:
+                  for line in f:
+                      k, v = line.strip().split('=', 1)
+                      d[k] = int(v, 16) if k == 'sio' else int(v)
+              reports[d['player']] = d
+
+          assert set(reports) == {0, 1}, reports
+          p0, p1 = reports[0], reports[1]
+
+          assert p0['parent'] == 1, reports
+          assert p1['parent'] == 0, reports
+          assert p0['ready'] == p1['ready'] == 1, reports
+          assert p0['peer'] == p1['peer'] == 1, reports
+          assert p0['sio_errors'] == p1['sio_errors'] == 0, reports
+
+          # The Lua probe presses A only on player 0. In the link-test ROM that
+          # queues Elfin count 10. Player 1 must actually consume that value.
+          assert p0['frames_tx'] >= 1, reports
+          assert p1['frames_rx'] >= 1, reports
+          assert p1['app_rx'] >= 1, reports
+          assert p1['app_last'] == 10, reports
+
+          print('PASS: mGBA multiplayer carried Elfin DATA 10 from P0 to P1')
+          PY
 
       - name: Upload mGBA evidence
         if: always()
@@ -140,15 +149,10 @@ jobs:
           if-no-files-found: warn
           path: |
             /tmp/mgba-version.txt
-            /tmp/mgba-windows.txt
             /tmp/mgba-ui.log
-            /tmp/openbox.log
-            /tmp/xvfb.log
-            /tmp/mgba-player0-before.png
-            /tmp/mgba-player1-before.png
-            /tmp/mgba-player0-after.png
-            /tmp/mgba-player1-after.png
-            /tmp/mgba-both-after.png
+            /tmp/mgba-probe-*.txt
+            /tmp/mgba-probe-*.png
+            /tmp/linktest.nm
 
       - name: Upload ROMs
         uses: actions/upload-artifact@v4

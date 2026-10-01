@@ -1,8 +1,7 @@
 #include "gba_link.h"
 #include <string.h>
 
-#define LINK_SERVICE_TICKS      128  /* 7.8125 ms at 16,384 Hz */
-#define LINK_HANDSHAKE_PERIOD   16
+#define LINK_TIMER_TICKS        50   /* 3.05 ms at Timer /1024 */
 
 static uint16_t make_frame(uint16_t type, uint8_t seq, uint8_t value) {
     return (uint16_t)(ELINK_MAGIC | type |
@@ -159,7 +158,7 @@ static void handle_rx(gba_link_t *l, uint16_t word) {
 static void hw_start(gba_link_t *l) {
     /* No GPIO mode. RCNT bit 15 must remain zero. */
     GBA_REG_RCNT = 0;
-    GBA_REG_SIOCNT = GBA_SIO_MULTI | GBA_SIO_BAUD_38400;
+    GBA_REG_SIOCNT = GBA_SIO_MULTI | GBA_SIO_BAUD_38400 | GBA_SIO_IRQ;
     GBA_REG_SIOMLT_SEND = make_frame(ELINK_HELLO, 0, 1);
 
     l->hw_enabled = 1;
@@ -254,11 +253,6 @@ void gba_link_service(gba_link_t *l) {
     if (l->transfer_active)
         return;
 
-    if (l->transfer_ticks) {
-        --l->transfer_ticks;
-        return;
-    }
-
     /*
      * Nintendo's own programmer documentation requires a guard interval
      * between multiplayer transfers; 7.8 ms is deliberately much longer than
@@ -267,10 +261,45 @@ void gba_link_service(gba_link_t *l) {
     uint16_t word = make_next_tx(l);
     GBA_REG_SIOMLT_SEND = word;
     l->last_tx_word = word;
-    GBA_REG_SIOCNT = GBA_SIO_MULTI | GBA_SIO_BAUD_38400 | GBA_SIO_START;
+    GBA_REG_SIOCNT = GBA_SIO_MULTI | GBA_SIO_BAUD_38400 | GBA_SIO_IRQ | GBA_SIO_START;
     l->transfer_active = 1;
     l->transfer_started_seen = 1;
-    l->transfer_ticks = LINK_SERVICE_TICKS;
+}
+
+void gba_link_on_serial(gba_link_t *l) {
+    uint16_t cnt, rx;
+
+    if (!l->enabled || !l->hw_enabled)
+        return;
+
+    cnt = GBA_REG_SIOCNT;
+    l->last_sio = cnt;
+
+    if (cnt & GBA_SIO_ERROR) {
+        ++l->sio_errors;
+        hw_start(l);
+        return;
+    }
+
+    if (!(cnt & GBA_SIO_READY))
+        return;
+
+    /*
+     * SERIAL is asserted when the current multiplayer transfer completes.
+     * This is the critical path on the child: timer polling alone can miss a
+     * sub-millisecond transfer while the emulator timer ISR is executing.
+     */
+    rx = l->parent ? GBA_REG_SIOMULTI1 : GBA_REG_SIOMULTI0;
+    l->transfer_active = 0;
+    l->transfer_started_seen = 0;
+    handle_rx(l, rx);
+
+    if (!l->parent) {
+        /* Child has no clock; preload the response for the next parent start. */
+        uint16_t next = make_next_tx(l);
+        GBA_REG_SIOMLT_SEND = next;
+        l->last_tx_word = next;
+    }
 }
 
 int gba_link_send_count(gba_link_t *l, uint8_t count) {

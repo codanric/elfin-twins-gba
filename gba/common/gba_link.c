@@ -161,7 +161,8 @@ static void hw_start(gba_link_t *l) {
 
 void gba_link_init(gba_link_t *l) {
     memset(l, 0, sizeof(*l));
-    hw_start(l);
+    l->enabled = 0;
+    l->hw_enabled = 0;
 }
 
 void gba_link_set_enabled(gba_link_t *l, int enabled) {
@@ -226,6 +227,16 @@ void gba_link_service(gba_link_t *l) {
 
         rx = l->parent ? GBA_REG_SIOMULTI1 : GBA_REG_SIOMULTI0;
         handle_rx(l, rx);
+
+        /*
+         * The slave has no clock. Its next outgoing word must be in
+         * SIOMLT_SEND before the master starts again.
+         */
+        if (!l->parent) {
+            uint16_t next = make_next_tx(l);
+            GBA_REG_SIOMLT_SEND = next;
+            l->last_tx_word = next;
+        }
     }
 
     if (!l->parent)

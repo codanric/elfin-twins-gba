@@ -42,7 +42,9 @@ jobs:
             -v "${GITHUB_WORKSPACE}:/work" \
             -w /work \
             devkitpro/devkitarm:latest \
-            /bin/bash -lc "arm-none-eabi-nm gba/linktest/build/elfin-linktest.elf | awk '\\$3 == \"link\" { print \\$1; exit }'" \
+            /opt/devkitpro/devkitARM/bin/arm-none-eabi-nm \
+            gba/linktest/build/elfin-linktest.elf \
+            | awk '$3 == "link" { print $1; exit }' \
             > /tmp/link.addr
           test -s /tmp/link.addr
           echo "LINK_BASE=$(cat /tmp/link.addr)" >> "$GITHUB_ENV"

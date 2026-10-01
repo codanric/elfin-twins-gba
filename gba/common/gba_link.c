@@ -191,10 +191,7 @@ void gba_link_service(gba_link_t *l) {
      * If a transfer is already in progress, the timer tick is simply ignored.
      */
     if (l->parent && !(cnt & GBA_SIO_START))
-        GBA_REG_SIOCNT = (uint16_t)(GBA_SIO_MULTI |
-                                    GBA_SIO_BAUD_115200 |
-                                    GBA_SIO_IRQ |
-                                    GBA_SIO_START);
+        GBA_REG_SIOCNT |= GBA_SIO_START;
 }
 
 void gba_link_on_serial(gba_link_t *l) {

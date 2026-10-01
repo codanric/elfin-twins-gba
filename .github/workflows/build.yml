@@ -48,7 +48,7 @@ jobs:
             -v "${GITHUB_WORKSPACE}:/work" \
             -w /work \
             devkitpro/devkitarm:latest \
-            /bin/bash -lc 'arm-none-eabi-nm -n gba/linktest/build/elfin-linktest.elf' \
+            /bin/bash -lc '/opt/devkitpro/devkitARM/bin/arm-none-eabi-nm -n gba/linktest/build/elfin-linktest.elf' \
             > /tmp/linktest.nm
 
           export LINK_BASE=$(awk '$3 == "link" {print $1; exit}' /tmp/linktest.nm)

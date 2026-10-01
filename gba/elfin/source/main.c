@@ -364,6 +364,7 @@ int main(void) {
     int dirty = 0;
     for (;;) {
         VBlankIntrWait();
+        emu_link_vsync();
         frame++;
         key_poll();
 

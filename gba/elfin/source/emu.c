@@ -227,7 +227,7 @@ static inline void emu_link_release_wake_only(void) {
 
 volatile uint32_t emu_isr_count;
 
-void emu_isr(void) {
+void __attribute__((section(".iwram"), long_call)) emu_isr(void) {
     emu_isr_count++;
     /* buttons: press = pull low (level 0), release = let go (-1) */
     uint8_t want = emu_buttons;
@@ -332,5 +332,4 @@ void emu_stop(void) {
     gba_link_set_enabled(&cable_link, 0);
 }
 
-void gba_link_timer_isr(void) __attribute__((long_call));
-void emu_link_serial_isr(void) __attribute__((long_call));
+

@@ -1,5 +1,5 @@
 /*
- * Elfin Twins GBA native link + RTC hardware test.
+ * Elfin Twins GBA native link hardware test.
  *
  * Put this ROM in BOTH GBAs and connect them with the same GBA Game Link
  * Cable used by ordinary multiplayer games.
@@ -19,13 +19,9 @@
 #include <tonc.h>
 
 #include "gba_link.h"
-#include "rtc.h"
 
 static gba_link_t link;
 static char line[48];
-static int rtc_result;
-static uint32_t rtc_first_secs;
-static uint32_t timer_first;
 static volatile uint32_t serial_irqs;
 static uint32_t vsync_services;
 static uint32_t app_rx_count;
@@ -133,12 +129,6 @@ int main(void) {
     /* Emerald-style: VBlank offers transfers; SERIAL owns completion. */
     irq_set(II_SERIAL, link_serial_isr, ISR_PRIO(0) | ISR_REPLACE);
 
-    rtc_result = rtc_init();
-    rtc_time_t t0;
-    if (rtc_present() && rtc_get(&t0) == 0)
-        rtc_first_secs = rtc_to_seconds(&t0);
-    timer_first = 0;
-
     for (;;) {
         VBlankIntrWait();
         ++vsync_services;
@@ -150,12 +140,6 @@ int main(void) {
         if (key_hit(KEY_L)) try_send(4);
         if (key_hit(KEY_R)) try_send(7);
         if (key_hit(KEY_SELECT)) link_reset();
-
-        if (key_hit(KEY_START) && rtc_result == RTC_POWER_LOST) {
-            rtc_time_t t = {2026, 1, 1, 4, 12, 0, 0};
-            rtc_set(&t);
-            rtc_result = RTC_OK;
-        }
 
         /* The test app is the consumer. Drain every DATA message so repeated
          * button tests cannot fill the transport queue and manufacture a
@@ -194,29 +178,12 @@ int main(void) {
                  app_last_count);
         put(7, line);
         put(8, "A:10  B:1  L:4  R:7");
-        put(9, "SELECT:reinit  START:set RTC");
+        put(9, "SELECT:reinit");
 
-        put(11, "------------------------------");
-        if (!rtc_present()) {
-            put(12, "RTC: NOT FOUND");
-            put(13, "enable RTC in flashcart menu");
-        } else {
-            rtc_time_t t;
-            if (rtc_get(&t) == 0) {
-                if (!timer_first) timer_first = 1;
-                snprintf(line, sizeof(line), "RTC:%04u-%02u-%02u %02u:%02u:%02u",
-                         t.year, t.month, t.day, t.hour, t.minute, t.second);
-                put(12, line);
-                uint32_t elapsed = rtc_first_secs ? rtc_to_seconds(&t) - rtc_first_secs : 0;
-                put(13, rtc_result == RTC_POWER_LOST ? "RTC: POWER LOST" : "RTC: OK");
-                snprintf(line, sizeof(line), "RTC elapsed:%lu s", (unsigned long)elapsed);
-                put(14, line);
-            } else {
-                put(12, "RTC: INVALID");
-                put(13, "");
-                put(14, "");
-            }
-        }
+        put(11, "Probe: SRAM + SIO state active");
+        put(12, "");
+        put(13, "");
+        put(14, "");
 
         put(16, "Native 16-bit SIO / 115200 bps");
         put(17, "No GPIO pin mapping is used.");

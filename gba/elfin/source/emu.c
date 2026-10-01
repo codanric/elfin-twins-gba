@@ -163,34 +163,6 @@ static inline void emu_link_deliver_wake(void) {
 }
 
 
-static void link_sync_in(void) {
-    int pin = link_pin();
-    if (pin != link_pin_active) {
-        /* the user switched wires: let go of the old one */
-        linkio_release(link_pin_active);
-        link_pin_active = (uint8_t)pin;
-    }
-    int raw_low = emu_link_mode != LINK_OFF && !linkio_level(link_pin_active);
-    if (!raw_low) {
-        link_stuck = 0;
-        link_low_run = 0;
-        emu_link_ok = 1;
-    } else if (!link.out_low && ++link_low_run > LINK_STUCK_SLICES) {
-        link_stuck = 1;
-    }
-    elfin_link_before(&link, &cpu, raw_low && !link_stuck);
-}
-
-static void link_sync_out(void) {
-    int drive = elfin_link_after(&link, &cpu) && emu_link_mode != LINK_OFF;
-    if (drive)
-        linkio_drive_low(link_pin_active);
-    else
-        linkio_release(link_pin_active);
-    emu_link_edges_rx = link.edges_rx;
-    emu_link_edges_tx = link.edges_tx;
-}
-
 volatile uint32_t emu_isr_count;
 
 void emu_isr(void) {

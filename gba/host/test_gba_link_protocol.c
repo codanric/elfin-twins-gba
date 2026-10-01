@@ -13,7 +13,7 @@
 #include <string.h>
 #include <sys/mman.h>
 
-#include "gba_link.h"
+#include "../common/gba_link.h"
 
 #define MMIO_PAGE ((void *)0x04000000u)
 #define MMIO_SIZE 0x3000u

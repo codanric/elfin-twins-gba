@@ -169,18 +169,15 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
     }
 
     if (pc == LINK_ROM_ANSWER) {
-        /* BA91 is the special responder pulse: it wakes the caller, but the
-         * caller's wake path does not invoke link_recv for this pulse. */
-        uint8_t state = splb20_read(c, LINK_RAM_STATE);
-        if (state != 4)
-            l->answer_armed = 0;
-        else if (!l->answer_armed) {
+        /* BA91 is linear code and reaches BA99 once per responder pulse. The
+         * caller's wake path does not invoke link_recv for this pulse, so send
+         * a wake-only transport event and then let the ROM continue. */
+        if (splb20_read(c, LINK_RAM_STATE) == 4) {
             if (!gba_link_send_wake(l))
                 return SPLB20_HOOK_WAIT;
             ++emu_link_hook_answer;
-            l->answer_armed = 1;
         }
-        return SPLB20_HOOK_NONE; /* still execute BA91 */
+        return SPLB20_HOOK_NONE; /* still execute the rest of BA91 */
     }
 
     return SPLB20_HOOK_NONE;

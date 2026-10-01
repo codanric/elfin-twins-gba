@@ -74,19 +74,8 @@ static void default_settings(void) {
     settings.blur = 0;           /* LCD fade is opt-in: the ROM draws plain on/off dots */
 }
 
-/* Copy the machine state with the emulation interrupt masked, then write. */
-EWRAM_BSS static splb20_t snap;
+/* DIAGNOSTIC BUILD ONLY: never touch the cartridge save. */
 static void save_now(void) {
-    u16 ime = REG_IME;
-    REG_IME = 0;
-    memcpy(&snap, &cpu, sizeof(cpu));
-    /* Runtime bindings are restored by save_load(); never serialize code or
-     * object addresses into a portable machine-state snapshot. */
-    snap.rom = NULL;
-    snap.pc_hook = NULL;
-    snap.pc_hook_user = NULL;
-    REG_IME = ime;
-    save_write(&snap, &settings, rtc_now());
 }
 
 static void sync_clock_from_rtc(void) {
@@ -334,29 +323,13 @@ int main(void) {
     rtc_state = rtc_init();
     emu_init();
 
-    uint32_t saved_secs = NO_RTC_TIME;
-    int have_save = save_load(&cpu, &settings, &saved_secs);
+    /*
+     * DIAGNOSTIC BUILD ONLY: ignore any existing save and RTC. The patched
+     * cold start below always creates the same fresh noon pet and reaches the
+     * Link-capable home screen immediately.
+     */
     apply_settings();
-
     int sync_at_frame = -1;
-    if (have_save) {
-        uint32_t now = rtc_now();
-        if (settings.away_mode != AWAY_PAUSE && now != NO_RTC_TIME &&
-            saved_secs != NO_RTC_TIME && now > saved_secs) {
-            uint32_t away = now - saved_secs;
-            if (settings.away_mode == AWAY_MAX_DAY && away > 86400)
-                away = 86400;
-            if (away >= 2)
-                catch_up(away);
-        }
-        if (settings.clock_sync)
-            sync_clock_from_rtc();
-    } else {
-        /* A brand new pet: the game sets its clock to 12:00 while booting,
-         * so sync with the RTC shortly after. */
-        sync_at_frame = 90;
-    }
-    save_now();
 
     emu_start();
 

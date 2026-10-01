@@ -25,6 +25,33 @@ harness_t *h_create(const uint8_t *rom, uint32_t size, uint32_t clock_hz,
 void h_destroy(harness_t *h) { free(h); }
 int32_t h_step(harness_t *h) { return splb20_step(&h->cpu); }
 int32_t h_run(harness_t *h, int32_t budget_fp) { return splb20_run(&h->cpu, budget_fp); }
+
+/*
+ * Regression hook for test_pc_hook_fastpath.py. It deliberately consumes the
+ * trapped instruction without changing PC; a one-instruction-sized run budget
+ * is enough to prove that splb20_run() dispatched the hook instead of silently
+ * executing through its optimized awake loop.
+ */
+static int h_test_hook_hits;
+static int h_test_pc_hook(splb20_t *c, uint16_t pc, void *user) {
+    (void)c;
+    (void)pc;
+    (void)user;
+    ++h_test_hook_hits;
+    return SPLB20_HOOK_CONSUME;
+}
+void h_test_hook_arm(harness_t *h, int pc) {
+    h_test_hook_hits = 0;
+    h->cpu.pc = (uint16_t)pc;
+    splb20_set_pc_hook(&h->cpu, h_test_pc_hook, NULL);
+}
+int h_test_hook_hits_get(harness_t *h) {
+    (void)h;
+    return h_test_hook_hits;
+}
+void h_test_hook_clear(harness_t *h) {
+    splb20_set_pc_hook(&h->cpu, NULL, NULL);
+}
 void h_port(harness_t *h, int mask, int level) { splb20_port(&h->cpu, (uint8_t)mask, level); }
 void h_reset(harness_t *h) { splb20_reset(&h->cpu); }
 void h_set_warp(harness_t *h, int warp) { h->cpu.timer_warp = warp; }

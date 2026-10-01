@@ -145,7 +145,7 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
         if (state != 4)
             l->answer_armed = 0;
         else if (!l->answer_armed) {
-            if (!gba_link_send_count(l, 1))
+            if (!gba_link_send_wake(l))
                 return SPLB20_HOOK_WAIT;
             ++emu_link_hook_answer;
             l->answer_armed = 1;
@@ -167,7 +167,7 @@ static void emu_link_serial_isr(void) {
 
 static inline void emu_link_apply_input(void) {
     /* A native DATA frame corresponds to the original falling PA5 wake edge. */
-    if (gba_link_wake_pending(&cable_link)) {
+    if (gba_link_line_low(&cable_link)) {
         cpu.in_low |= LINK_PA5;
         cpu.in_high &= (uint8_t)~LINK_PA5;
     } else {
@@ -182,6 +182,19 @@ static inline void emu_link_deliver_wake(void) {
         gba_link_mark_wake_delivered(&cable_link);
         splb20_key_irq(&cpu);
     }
+}
+
+/*
+ * The BA91 responder pulse is used only to wake a caller whose link_state has
+ * bit 7 set. Keep virtual PA5 low after raising the interrupt so the ROM's
+ * wake handler can actually read it. Once that handler has converted the
+ * caller state to state 1, the pulse has served its purpose and can release.
+ */
+static inline void emu_link_release_wake_only(void) {
+    if (gba_link_wake_is_only(&cable_link) &&
+        !gba_link_wake_pending(&cable_link) &&
+        !(splb20_read(&cpu, LINK_RAM_STATE) & 0x80))
+        gba_link_release_wake(&cable_link);
 }
 
 
@@ -211,6 +224,7 @@ void emu_isr(void) {
     emu_link_apply_input();
     if (owed_fp > 0)
         owed_fp -= splb20_run(&cpu, owed_fp);
+    emu_link_release_wake_only();
     emu_link_deliver_wake();
 
     emu_link_edges_rx = cable_link.frames_rx;

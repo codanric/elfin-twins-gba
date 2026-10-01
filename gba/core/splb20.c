@@ -768,10 +768,26 @@ static int32_t next_event(const splb20_t *c) {
     return n;
 }
 
+/*
+ * The PC hook is currently used by the GBA front end for the three Elfin
+ * link entry points. splb20_run() normally executes awake code through its
+ * batched fast path, bypassing splb20_step(); stop at these PCs so the hook
+ * is guaranteed to run before the intercepted ROM instruction executes.
+ *
+ * Keep this test tiny: it runs once per fast-path instruction and avoids
+ * disabling batching for the whole game merely because a hook is installed.
+ */
+static inline __attribute__((always_inline)) int pc_hook_trap(const splb20_t *c) {
+    if (!c->pc_hook)
+        return 0;
+    return c->pc == 0xBE0A || c->pc == 0xBE41 || c->pc == 0xBA91;
+}
+
 int32_t SPLB20_FAST splb20_run(splb20_t *c, int32_t budget_fp) {
     int32_t done = 0;
     while (done < budget_fp) {
-        if (!c->rosc_enbl || !c->cpu_enbl || c->timer_warp != 1 || c->prescalar > 20) {
+        if (!c->rosc_enbl || !c->cpu_enbl || c->timer_warp != 1 ||
+            c->prescalar > 20 || pc_hook_trap(c)) {
             int32_t skipped = sleep_skip(c, budget_fp - done);
             if (skipped) {
                 done += skipped;
@@ -788,6 +804,14 @@ int32_t SPLB20_FAST splb20_run(splb20_t *c, int32_t budget_fp) {
         c->pending_fp = 0;
         c->io_written = 0;
         for (;;) {
+            /*
+             * A branch/JSR in this batch may have just reached a hardware
+             * hook. Flush the cycles already accumulated in this batch, then
+             * let the next outer iteration dispatch it through splb20_step().
+             */
+            if (pc_hook_trap(c))
+                break;
+
             uint8_t opcode = rom_byte(c, c->pc);
             if ((opcode == 0x85 || opcode == 0xA5) &&
                 (loop_hint[c->pc >> 3] >> (c->pc & 7) & 1)) {

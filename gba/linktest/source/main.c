@@ -26,8 +26,8 @@ static char line[48];
 static int rtc_result;
 static uint32_t rtc_first_secs;
 static uint32_t timer_first;
-static volatile uint32_t timer_irqs;
 static volatile uint32_t serial_irqs;
+static uint32_t vsync_services;
 static uint32_t app_rx_count;
 static uint8_t app_last_count;
 
@@ -40,11 +40,6 @@ static void put(int row, const char *s) {
     buf[30] = 0;
     tte_set_pos(0, row * 8);
     tte_write(buf);
-}
-
-static void link_timer_isr(void) {
-    ++timer_irqs;
-    gba_link_service(&link);
 }
 
 static void link_serial_isr(void) {
@@ -74,13 +69,8 @@ int main(void) {
     gba_link_init(&link);
     gba_link_set_enabled(&link, 1);
 
-    /* Same master pacing used by Pokemon Emerald's cable link: 197 ticks
-     * at /64 (~0.751 ms). Only the hardware master asserts SIO START. */
-    REG_TM0CNT_H = 0;
-    REG_TM0CNT_L = (u16)(65536 - 197);
-    irq_add(II_TIMER0, link_timer_isr);
+    /* Emerald-style: VBlank offers transfers; SERIAL owns completion. */
     irq_set(II_SERIAL, link_serial_isr, ISR_PRIO(0) | ISR_REPLACE);
-    REG_TM0CNT_H = TM_ENABLE | TM_IRQ | TM_FREQ_64;
 
     rtc_result = rtc_init();
     rtc_time_t t0;
@@ -90,6 +80,8 @@ int main(void) {
 
     for (;;) {
         VBlankIntrWait();
+        ++vsync_services;
+        gba_link_service(&link);
         key_poll();
 
         if (key_hit(KEY_A)) try_send(10);
@@ -134,9 +126,9 @@ int main(void) {
                  (unsigned long)link.frames_rx,
                  (unsigned long)link.frames_tx);
         put(6, line);
-        snprintf(line, sizeof(line), "IRQ S:%lu T:%lu  data:%lu/%u",
+        snprintf(line, sizeof(line), "IRQ S:%lu V:%lu  data:%lu/%u",
                  (unsigned long)serial_irqs,
-                 (unsigned long)timer_irqs,
+                 (unsigned long)vsync_services,
                  (unsigned long)app_rx_count,
                  app_last_count);
         put(7, line);

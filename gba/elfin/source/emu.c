@@ -101,19 +101,28 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
 
     if (pc == LINK_ROM_RECV) {
         uint8_t edges;
+
+        /*
+         * Match link_recv's entry setup once, then hold the emulated CPU at
+         * the subroutine entry until a complete native packet is available.
+         */
+        if (!l->recv_armed) {
+            splb20_write(c, LINK_PA_DIR, 0x3F);
+            splb20_write(c, LINK_PA_DATA, 0xFF);
+            splb20_write(c, LINK_INT_CFG, 0x00);
+            splb20_write(c, LINK_RAM_EDGES, 0);
+            splb20_write(c, 0xAF, 0x00);
+            splb20_write(c, 0xB0, 0x00);
+            l->recv_armed = 1;
+        }
+
         if (!gba_link_recv_count(l, &edges))
             return SPLB20_HOOK_WAIT;
 
-        /* link_recv's observable setup/result. */
-        splb20_write(c, LINK_PA_DIR, 0x3F);
-        splb20_write(c, LINK_PA_DATA, 0xFF);
-        splb20_write(c, LINK_INT_CFG, 0x00);
         splb20_write(c, LINK_RAM_EDGES, edges);
-        splb20_write(c, 0xAF, 0x00);
-        splb20_write(c, 0xB0, 0x00);
-
         c->in_low &= (uint8_t)~LINK_PA5;
         c->in_high |= LINK_PA5;
+        l->recv_armed = 0;
         splb20_return_from_subroutine(c);
         return SPLB20_HOOK_CONSUME;
     }

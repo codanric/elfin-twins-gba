@@ -19,7 +19,7 @@ volatile uint32_t emu_link_edges_tx;
 
 static uint8_t applied_buttons;
 static gba_link_t cable_link;
-volatile uint8_t emu_link_ok;      /* GBA multiplayer link is synchronized */
+volatile uint8_t emu_link_ok;      /* native GBA link is synchronized */
 /* Pacing: Timer 3 runs freely at 16.78 MHz / 64 = 262144 Hz. Each interrupt
  * runs the emulated cycles for the real time that has passed since the
  * previous one (560000 / 262144 = 4375/2048 cycles = 4375/8 fp8 per tick),
@@ -29,6 +29,10 @@ static uint32_t time_frac;
 static int32_t owed_fp;
 #define OWED_MAX_FP ((EMU_CLOCK / 8) << SPLB20_FP)   /* never catch up more than 1/8 s */
 static uint32_t last_period = 0xFFFFFFFF;
+
+static inline int link_pin(void) {
+    return emu_link_mode == LINK_ON_SC ? LINK_SC : LINK_SD;
+}
 
 void emu_sound_silence(void) {
     REG_SND1CNT = SSQR_ENV_BUILD(0, 0, 0) | SSQR_DUTY1_2;
@@ -65,22 +69,21 @@ void emu_sound_update(void) {
 }
 
 /*
- * The original ROM's link routines are timing-sensitive one-wire code.
- * On GBA we consume those subroutines at the emulator boundary and carry
- * their resulting edge-count messages over the native GBA multiplayer bus.
+ * The original ROM link routines are consumed at their entry points. Their
+ * logical messages are then transported by native GBA multiplayer SIO.
  */
-#define LINK_ROM_SEND   0xBE0A
-#define LINK_ROM_RECV   0xBE41
-#define LINK_ROM_ANSWER 0xBA91
-#define LINK_RAM_TMPCOUNT 0xAE
-#define LINK_RAM_EDGES    0xB4
-#define LINK_RAM_STATE    0xB5
-#define LINK_PA_DIR       0x71
-#define LINK_PA_DATA      0x73
-#define LINK_INT_CFG      0x79
-#define LINK_PA5          0x20
+#define LINK_ROM_SEND      0xBE0A
+#define LINK_ROM_RECV      0xBE41
+#define LINK_ROM_ANSWER    0xBA91
+#define LINK_RAM_TMPCOUNT  0xAE
+#define LINK_RAM_EDGES     0xB4
+#define LINK_RAM_STATE     0xB5
+#define LINK_PA_DIR        0x71
+#define LINK_PA_DATA       0x73
+#define LINK_INT_CFG       0x79
+#define LINK_PA5           0x20
 
-static int emu_link_hook(splb20_t *c, uint16_t pc, void *user) {
+static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
     gba_link_t *l = (gba_link_t *)user;
 
     if (pc == LINK_ROM_SEND) {
@@ -90,10 +93,7 @@ static int emu_link_hook(splb20_t *c, uint16_t pc, void *user) {
         if (!gba_link_send_count(l, edges))
             return SPLB20_HOOK_WAIT;
 
-        /*
-         * Reproduce link_send's externally visible final state without
-         * executing its 183 ms / 1.26 ms GPIO waveform.
-         */
+        /* link_send leaves these values after releasing PA5. */
         splb20_write(c, LINK_RAM_TMPCOUNT, 0);
         splb20_write(c, 0xAF, 0xFF);
         splb20_write(c, LINK_PA_DIR, 0x3F);
@@ -105,15 +105,10 @@ static int emu_link_hook(splb20_t *c, uint16_t pc, void *user) {
 
     if (pc == LINK_ROM_RECV) {
         uint8_t edges;
-
         if (!gba_link_recv_count(l, &edges))
             return SPLB20_HOOK_WAIT;
 
-        /*
-         * Match the real link_recv setup and result: the routine leaves the
-         * link pin released, disables the link interrupt during the wait, and
-         * returns the observed edge count in $B4.
-         */
+        /* link_recv's observable setup/result. */
         splb20_write(c, LINK_PA_DIR, 0x3F);
         splb20_write(c, LINK_PA_DATA, 0xFF);
         splb20_write(c, LINK_INT_CFG, 0x00);
@@ -123,28 +118,21 @@ static int emu_link_hook(splb20_t *c, uint16_t pc, void *user) {
 
         c->in_low &= (uint8_t)~LINK_PA5;
         c->in_high |= LINK_PA5;
-
         splb20_return_from_subroutine(c);
         return SPLB20_HOOK_CONSUME;
     }
 
     if (pc == LINK_ROM_ANSWER) {
-        /*
-         * BA91 is the special answer pulse: one falling edge, held low until
-         * the receiver's quiet period expires. Native GBA transport represents
-         * its logical result directly as edge-count 1.
-         *
-         * The ROM enters BA91 in link_state 4 and changes it to 5 before
-         * returning, so that state is also our one-shot guard.
-         */
-        if (splb20_read(c, LINK_RAM_STATE) == 4 && !l->answer_armed) {
+        /* BA91 is the one special answer pulse: receiver counts one edge. */
+        uint8_t state = splb20_read(c, LINK_RAM_STATE);
+        if (state != 4)
+            l->answer_armed = 0;
+        else if (!l->answer_armed) {
             if (!gba_link_send_count(l, 1))
                 return SPLB20_HOOK_WAIT;
             l->answer_armed = 1;
-        } else if (splb20_read(c, LINK_RAM_STATE) != 4) {
-            l->answer_armed = 0;
         }
-        return SPLB20_HOOK_NONE;
+        return SPLB20_HOOK_NONE; /* still execute BA91 */
     }
 
     return SPLB20_HOOK_NONE;
@@ -156,15 +144,13 @@ static void emu_link_timer_isr(void) {
 }
 
 static inline void emu_link_apply_input(void) {
-    /*
-     * A received DATA packet represents the original falling PA5 edge. Keep
-     * the emulated pin low until link_recv consumes the corresponding count.
-     * We modify input latches directly so this never creates a second key IRQ;
-     * the interrupt is explicitly latched below.
-     */
+    /* A native DATA frame corresponds to the original falling PA5 wake edge. */
     if (gba_link_wake_pending(&cable_link)) {
         cpu.in_low |= LINK_PA5;
         cpu.in_high &= (uint8_t)~LINK_PA5;
+    } else {
+        cpu.in_low &= (uint8_t)~LINK_PA5;
+        cpu.in_high |= LINK_PA5;
     }
 }
 
@@ -176,39 +162,6 @@ static inline void emu_link_deliver_wake(void) {
     }
 }
 
-void emu_sound_silence(void) {
-    REG_SND1CNT = SSQR_ENV_BUILD(0, 0, 0) | SSQR_DUTY1_2;
-    REG_SND1FREQ = SFREQ_RESET;
-    last_period = 0;
-}
-
-void emu_sound_update(void) {
-    /* The buzzer plays clock_hz / period Hz. DMG square channel 1 plays
-     * 131072 / (2048 - rate) Hz, so rate = 2048 - 131072 * period / clock_hz,
-     * rounded to the nearest step (truncating made every note sharp, by a
-     * different amount per note: up to +27 cents). */
-    uint32_t period = emu_sound_on ? splb20_sound_period(&cpu) : 0;
-    cpu.snd_changed = 0;
-    if (period == last_period)
-        return;
-    uint32_t clock = cpu.clock_hz;
-    /* audible range 64 Hz .. 65536 Hz; also keeps 131072 * period in 32 bits */
-    if (period == 0 || period > clock / 64 || period * 65536u < clock) {
-        emu_sound_silence();
-        return;
-    }
-    uint32_t steps = (131072u * period + clock / 2) / clock;   /* 2048 - rate */
-    if (steps < 1)
-        steps = 1;
-    uint32_t rate = 2048 - steps;
-    if (last_period == 0) {
-        REG_SND1CNT = SSQR_ENV_BUILD(9, 0, 0) | SSQR_DUTY1_2;
-        REG_SND1FREQ = SFREQ_RESET | rate;
-    } else {
-        REG_SND1FREQ = rate;
-    }
-    last_period = period;
-}
 
 static void link_sync_in(void) {
     int pin = link_pin();
@@ -287,7 +240,7 @@ void emu_init(void) {
 
     gba_link_init(&cable_link);
     gba_link_set_enabled(&cable_link, emu_link_mode != LINK_OFF);
-    splb20_set_pc_hook(&cpu, emu_link_hook, &cable_link);
+    splb20_set_pc_hook(&cpu, emu_link_pc_hook, &cable_link);
     emu_link_ok = 0;
 }
 
@@ -303,8 +256,7 @@ void emu_start(void) {
     REG_TM2CNT_L = (u16)(65536 - (16777216 / EMU_IRQ_HZ));
     irq_add(II_TIMER2, emu_isr);
 
-    /* Link driver: 16,384 Hz polling is fast enough to observe the complete
-     * 38400-bps 16-bit transfer while leaving the main emulator ISR unchanged. */
+    /* Native SIO: poll much faster than the 38,400-bps 16-bit transfer time. */
     REG_TM0CNT_H = 0;
     REG_TM0CNT_L = 0xFFFF;
     irq_add(II_TIMER0, emu_link_timer_isr);
@@ -321,3 +273,5 @@ void emu_stop(void) {
     irq_delete(II_TIMER0);
     gba_link_set_enabled(&cable_link, 0);
 }
+
+void gba_link_timer_isr(void) __attribute__((long_call));

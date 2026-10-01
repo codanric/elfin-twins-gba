@@ -29,7 +29,7 @@ on that.
 ## Get it
 
 - **The game:** [`gba/release/elfin-twins.gba`](gba/release/elfin-twins.gba)
-- **The link and clock tester:** [`gba/release/elfin-linktest.gba`](gba/release/elfin-linktest.gba)
+- **The native link and clock tester:** [`gba/release/elfin-linktest.gba`](gba/release/elfin-linktest.gba)
 - **The manual:** [Elfin_Twins_GM-021_Manual.pdf](gba/docs/Elfin_Twins_GM-021_Manual.pdf)
 - **The technical reference:** [Elfin_Twins_GM-021_Technical_Reference.pdf](gba/docs/Elfin_Twins_GM-021_Technical_Reference.pdf)
 - **The disassembly:** [elfin_twins.asm](gba/docs/analysis/elfin_twins.asm)
@@ -56,10 +56,9 @@ A few things the GBA version adds:
   you were away and plays through that time in a couple of seconds. So yes, they'll be hungry in the
   morning. Feed them before you go.
 - **It saves on its own**, a few seconds after you press a button.
-- **Two GBAs can play together over a link cable**, COMING SOON.
-Everything has been tested carefully in emulation. The link cable hasn't been tried on two real GBAs yet,
-because it depends on a small detail of the toy's chip that we still need to confirm on hardware. If you
-test it, we'd love to hear how it went.
+- **Two GBAs can play together over a standard GBA link cable.** One unit starts Link, the other answers
+  automatically, and tug-of-war, rock-paper-scissors and arm wrestling all run over the native GBA
+  multiplayer port. This has been verified on two real GBAs.
 
 ## A few things we found inside
 
@@ -95,8 +94,9 @@ with BrickEmuPy's and compares them after every single instruction:
 python3 gba/host/verify_core.py 18000000
 ```
 
-There are more tests in `gba/host/`: the time-away catch-up against full emulation, the link cable
-between two emulated toys, and the speed-up tricks against plain step-by-step emulation. The disassembly
+There are more tests in `gba/host/`: the time-away catch-up against full emulation, the original
+two-unit link state flow, the native GBA multiplayer transport, and the speed-up tricks against plain
+step-by-step emulation. Final link play was also verified on two real GBAs. The disassembly
 and the PDFs can be regenerated with the scripts in `gba/tools/` and `gba/docs/tools/`. The pictures in the
 manual come from running the real ROM, so they show exactly what the toy shows.
 
@@ -105,8 +105,8 @@ manual come from running the real ROM, so they show exactly what the toy shows.
 ```
 assets/        the toy's ROM, artwork and button wiring (from BrickEmuPy)
 cores/         BrickEmuPy's SPLB20 emulator, kept as the reference we test against
-gba/core/      our C version of the chip, the time-away catch-up and the link bridge
-gba/common/    the cartridge clock driver and the link port helpers
+gba/core/      our C version of the chip and the time-away catch-up
+gba/common/    the cartridge clock driver and native GBA multiplayer transport
 gba/elfin/     the GBA game itself
 gba/linktest/  the link and clock tester
 gba/tools/     build rules, asset converter, disassembler and symbol table

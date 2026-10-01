@@ -26,7 +26,7 @@ void elfin_link_before(elfin_link_t *l, splb20_t *c, int pin_low) {
     }
 }
 
-int elfin_link_after(elfin_link_t *l, splb20_t *c) {
+int elfin_link_after(elfin_link_t *l, splb20_t *c, int pin_low) {
     uint8_t drive = (splb20_drive_low(c) & ELFIN_PA_LINK) != 0;
 
     if (drive && !l->out_low) {
@@ -41,7 +41,12 @@ int elfin_link_after(elfin_link_t *l, splb20_t *c) {
          * a low input to the caller. The real toy uses the resulting key
          * interrupt to wake. Preserve that edge in the emulation bridge.
          */
-        if (l->wire_low)
+        /*
+         * Only the peer's level can produce this wake. l->wire_low is not
+         * sufficient here because it was necessarily low while our own
+         * transmitter was driving the pin low.
+         */
+        if (pin_low)
             l->pending = 1;
 
         l->tx_message = l->tx_edges;
@@ -53,6 +58,7 @@ int elfin_link_after(elfin_link_t *l, splb20_t *c) {
     }
 
     l->out_low = drive;
+    l->wire_low = (uint8_t)(drive || pin_low);
 
     if (l->pending &&
         (c->int_cfg & (SPLB20_INT_NMI_ENBL | SPLB20_INT_NORMALKEY)) ==

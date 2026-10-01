@@ -2,6 +2,17 @@
 #include <string.h>
 
 #define TX_WAKE_MARK 0x80
+#define GBA_REG_IME (*(volatile uint16_t *)0x04000208)
+
+static uint16_t link_irq_lock(void) {
+    uint16_t ime = GBA_REG_IME;
+    GBA_REG_IME = 0;
+    return ime;
+}
+
+static void link_irq_unlock(uint16_t ime) {
+    GBA_REG_IME = ime;
+}
 
 static uint16_t make_frame(uint16_t type, uint8_t seq, uint8_t value) {
     return (uint16_t)(ELINK_MAGIC | type |
@@ -337,40 +348,56 @@ void gba_link_on_serial(gba_link_t *l) {
 }
 
 int gba_link_send_count(gba_link_t *l, uint8_t count) {
+    uint16_t ime;
+    int ok;
+
     if (!l->enabled)
         return 0;
 
     /*
-     * Queue before the cable reaches READY. This is important because the
-     * original Elfin caller emits its wake/message before the peer has had a
-     * chance to finish joining the GBA bus.
+     * SERIAL may preempt the emulator timer ISR. Protect the producer update
+     * so make_next_tx() can never observe a half-updated ring-buffer state.
      */
-    return queue_push(l->tx_queue, &l->tx_head, &l->tx_len,
-                      (uint8_t)(count & 0x0F));
+    ime = link_irq_lock();
+    ok = queue_push(l->tx_queue, &l->tx_head, &l->tx_len,
+                    (uint8_t)(count & 0x0F));
+    link_irq_unlock(ime);
+    return ok;
 }
 
 int gba_link_send_wake(gba_link_t *l) {
+    uint16_t ime;
+    int ok;
+
     if (!l->enabled)
         return 0;
-    return queue_push(l->tx_queue, &l->tx_head, &l->tx_len, TX_WAKE_MARK);
+
+    ime = link_irq_lock();
+    ok = queue_push(l->tx_queue, &l->tx_head, &l->tx_len, TX_WAKE_MARK);
+    link_irq_unlock(ime);
+    return ok;
 }
 
 int gba_link_recv_count(gba_link_t *l, uint8_t *count) {
-    if (!l->rx_len)
-        return 0;
+    uint16_t ime;
+    int ok = 0;
 
-    *count = queue_peek(l->rx_queue, l->rx_head);
-    queue_pop(&l->rx_head, &l->rx_len);
+    ime = link_irq_lock();
+    if (l->rx_len) {
+        *count = queue_peek(l->rx_queue, l->rx_head);
+        queue_pop(&l->rx_head, &l->rx_len);
 
-    if (!l->rx_len) {
-        l->wake_pending = 0;
-        l->wake_only = 0;
-    } else {
-        l->wake_pending = 1;
-        l->wake_delivered = 0;
+        if (!l->rx_len) {
+            l->wake_pending = 0;
+            l->wake_only = 0;
+        } else {
+            l->wake_pending = 1;
+            l->wake_delivered = 0;
+        }
+        ok = 1;
     }
-
-    return 1;
+    link_irq_unlock(ime);
+    return ok;
 }
 
 int gba_link_is_ready(const gba_link_t *l) {

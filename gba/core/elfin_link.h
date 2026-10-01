@@ -33,6 +33,10 @@ typedef struct {
     uint8_t wire_low;    /* last known wire level (0/1 = high/low) */
     uint8_t pending;     /* latched falling edge not yet delivered */
     uint32_t edges_rx, edges_tx;
+    uint8_t tx_active;       /* original PA5 has entered output-low */
+    uint8_t tx_edges;        /* transitions after the initial falling edge */
+    uint8_t tx_ready;        /* tx_message contains a completed burst */
+    uint8_t tx_message;
 } elfin_link_t;
 
 #ifdef __cplusplus

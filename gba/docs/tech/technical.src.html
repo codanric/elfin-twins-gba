@@ -517,13 +517,12 @@ timeouts: caller gives up after 6 ticks without an edge (L_B735)</pre>
   <figure><img src="../img/gba_home.png" style="width:90mm"><figcaption>The port in mGBA.</figcaption></figure>
 
   <h3>7.5 Link bridge</h3>
-  <p>The GBA link port is used in general-purpose mode (<code>RCNT = $8000 | dir&lt;&lt;4 | data</code>). The toy's
-    wire is mapped to <b>SD</b>, which the GBA link cable connects to every console (SO/SI are daisy-chained).
-    <b>SC</b> can be selected instead. The pin is only ever driven low or released, so two consoles never fight.
-    Once per 2048 Hz slice <code>elfin_link_before()</code> feeds the wire to PA5 and <code>elfin_link_after()</code>
-    drives the wire when PA5 is output-low. A falling wire edge is latched and delivered with
-    <code>splb20_key_irq()</code> when the key interrupt is enabled (§6). A wire never seen high, or low for more than
-    10 s, is ignored. That protects against missing pull-ups and unconnected cables.</p>
+  <p>The GBA link port now uses the hardware <b>16-bit Multi-Player SIO mode</b>
+    (<code>RCNT=0</code>, <code>SIOCNT</code> multiplayer bit set, 115200 bps). The cable elects a parent/master
+    through its SI terminal and the parent clocks transfers; each transfer carries a compact Elfin edge-count frame.
+    This avoids depending on the GPIO-mode SD pull-up. The original Elfin PA5 protocol remains authoritative above
+    the transport: <code>elfin_link_before()</code> and <code>elfin_link_after()</code> reconstruct the virtual wire
+    at the 2048 Hz emulation boundary, including the latched falling-edge wake behavior required by §6.</p>
 
   <h3>7.6 RTC catch-up</h3>
   <p>At start-up the port reads the cartridge RTC (Seiko S-3511A protocol on cartridge GPIO <code>$80000C4–C8</code>; the
@@ -628,8 +627,8 @@ timeouts: caller gives up after 6 ticks without an edge (L_B735)</pre>
   <ul>
     <li><b>Latched key edges.</b> The link model of §6 should be confirmed on real hardware, for example by linking a real
       toy to the GBA port, or by logging PA5 of two real toys.</li>
-    <li><b>SD pull-up on the GBA link cable in GPIO mode.</b> <code>elfin-linktest.gba</code> reports whether a
-      released SD idles high. If not, the port can use SC.</li>
+    <li><b>Real-hardware SIO validation.</b> The game now uses Multi-Player SIO rather than GPIO SD/SC, so the remaining
+      validation is a two-GBA cable session using the rebuilt ROM.</li>
     <li><b>Names of some items.</b> Food items and outings are identified by effect. Their names are inferred from the pictures.</li>
     <li><b>Mini-game scoring.</b> The exact rules of the two games in mode 3 and of the outing challenges were only
       observed, not fully traced.</li>

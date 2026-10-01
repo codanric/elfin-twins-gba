@@ -107,6 +107,10 @@ static void link_sync_out(void) {
 
 volatile uint32_t emu_isr_count;
 
+void gba_link_irq_handler(void) {
+    gba_link_irq(&cable_link);
+}
+
 void emu_isr(void) {
     emu_isr_count++;
     /* buttons: press = pull low (level 0), release = let go (-1) */

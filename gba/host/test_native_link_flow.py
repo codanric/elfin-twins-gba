@@ -97,6 +97,10 @@ def main():
 
     print("PASS handshake: caller state 2, responder state 5")
 
+    # Let the caller's link UI finish its post-handshake redraw before pressing
+    # ENTER, exactly as a human must wait for input to become enabled.
+    link.ready(a)
+
     # ENTER on the default first activity goes through the inline BDB4
     # send-then-receive routine. Both sides should enter mode 0x6x.
     link.press(a, "enter")

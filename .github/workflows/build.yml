@@ -5,22 +5,23 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: gba-native-link-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install ARM toolchain
+      - name: Build with devkitARM
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq gcc-arm-none-eabi
-
-      - name: Build Elfin Twins
-        run: make -C gba/elfin
-
-      - name: Build native link test ROM
-        run: make -C gba/linktest
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/work" \
+            -w /work \
+            devkitpro/devkitarm:latest \
+            /bin/bash -lc 'make -C gba/elfin && make -C gba/linktest'
 
       - name: Upload ROMs
         uses: actions/upload-artifact@v4

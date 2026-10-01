@@ -30,10 +30,6 @@ static int32_t owed_fp;
 #define OWED_MAX_FP ((EMU_CLOCK / 8) << SPLB20_FP)   /* never catch up more than 1/8 s */
 static uint32_t last_period = 0xFFFFFFFF;
 
-static inline int link_pin(void) {
-    return emu_link_mode == LINK_ON_SC ? LINK_SC : LINK_SD;
-}
-
 void emu_sound_silence(void) {
     REG_SND1CNT = SSQR_ENV_BUILD(0, 0, 0) | SSQR_DUTY1_2;
     REG_SND1FREQ = SFREQ_RESET;

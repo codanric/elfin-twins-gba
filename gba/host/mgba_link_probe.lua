@@ -19,8 +19,24 @@ local off_errors = envnum("OFF_ERRORS")
 local frame = 0
 local pressed = false
 
+do
+    local f = assert(io.open("/tmp/mgba-script-trace.txt", "a"))
+    f:write("loaded title=" .. emu:getGameTitle() .. "\n")
+    f:close()
+end
+
 callbacks:add("frame", function()
     frame = frame + 1
+    if frame == 1 or frame == 60 or frame == 120 or frame == 240 or frame == 420 then
+        local f = assert(io.open("/tmp/mgba-script-trace.txt", "a"))
+        local sio = emu:read16(0x04000128)
+        f:write(string.format("frame=%d sio=%04X parent=%d ready=%d peer=%d\n",
+            frame, sio,
+            emu:read8(link_base + off_parent),
+            emu:read8(link_base + off_ready),
+            emu:read8(link_base + off_peer)))
+        f:close()
+    end
 
     local parent = emu:read8(link_base + off_parent)
 

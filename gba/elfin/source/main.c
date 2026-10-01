@@ -80,6 +80,11 @@ static void save_now(void) {
     u16 ime = REG_IME;
     REG_IME = 0;
     memcpy(&snap, &cpu, sizeof(cpu));
+    /* Runtime bindings are restored by save_load(); never serialize code or
+     * object addresses into a portable machine-state snapshot. */
+    snap.rom = NULL;
+    snap.pc_hook = NULL;
+    snap.pc_hook_user = NULL;
     REG_IME = ime;
     save_write(&snap, &settings, rtc_now());
 }

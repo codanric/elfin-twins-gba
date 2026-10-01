@@ -74,6 +74,11 @@ int main(void) {
     irq_add(II_TIMER0, link_timer_isr);
     irq_set(II_SERIAL, link_serial_isr, ISR_PRIO(0) | ISR_REPLACE);
 
+    /* 50 ticks at 16.78 MHz / 1024 = 3.052 ms. This timer is the
+     * multiplayer master clock source; configuring TM0CNT_L alone does not
+     * start it. */
+    REG_TM0CNT_H = TM_ENABLE | TM_IRQ | TM_FREQ_1024;
+
     rtc_result = rtc_init();
     rtc_time_t t0;
     if (rtc_present() && rtc_get(&t0) == 0)

@@ -39,6 +39,7 @@
 #define ELINK_ACK           0x0300
 #define ELINK_PING          0x0400
 #define ELINK_RESET         0x0500
+#define ELINK_WAKE          0x0600
 #define ELINK_TYPE_MASK     0x0F00
 
 #define ELINK_RX_COUNT      1
@@ -71,6 +72,7 @@ typedef struct {
 
     uint8_t wake_pending;
     uint8_t wake_delivered;
+    uint8_t wake_only;
 
     uint8_t answer_armed;
     uint8_t recv_armed;
@@ -95,12 +97,18 @@ void gba_link_on_serial(gba_link_t *l);
 void gba_link_service(gba_link_t *l);
 
 int gba_link_send_count(gba_link_t *l, uint8_t count);
+/* Send the special Elfin responder wake pulse. It wakes the remote ROM but
+ * does not leave a link_recv edge-count message behind. */
+int gba_link_send_wake(gba_link_t *l);
 int gba_link_recv_count(gba_link_t *l, uint8_t *count);
 
 int gba_link_is_ready(const gba_link_t *l);
 int gba_link_is_parent(const gba_link_t *l);
 uint16_t gba_link_status(const gba_link_t *l);
 int gba_link_wake_pending(const gba_link_t *l);
+int gba_link_line_low(const gba_link_t *l);
+int gba_link_wake_is_only(const gba_link_t *l);
 void gba_link_mark_wake_delivered(gba_link_t *l);
+void gba_link_release_wake(gba_link_t *l);
 
 #endif

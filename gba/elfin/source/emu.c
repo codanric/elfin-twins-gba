@@ -91,42 +91,6 @@ void emu_sound_update(void) {
 #define LINK_INT_CFG       0x79
 #define LINK_PA5           0x20
 
-/*
- * Emerald advances link state from SERIAL completion, not from enqueue. Keep
- * an intercepted Elfin send parked at its ROM PC until the native word has
- * actually completed. If no native peer was established before the send
- * began, drop the event and let the original Elfin caller follow its normal
- * no-answer path instead of hanging forever on an absent GBA partner.
- */
-static int emu_link_wait_tx(gba_link_t *l, uint16_t pc,
-                            uint8_t value, int wake_only) {
-    if (l->hook_tx_active) {
-        if (l->hook_tx_pc != pc)
-            return 0;
-        if (l->frames_tx < l->hook_tx_goal)
-            return 0;
-        l->hook_tx_active = 0;
-        l->hook_tx_pc = 0;
-        l->hook_tx_goal = 0;
-        return 1;
-    }
-
-    if (!gba_link_is_ready(l))
-        return 1;
-
-    if (wake_only) {
-        if (!gba_link_send_wake(l))
-            return 0;
-    } else if (!gba_link_send_count(l, value)) {
-        return 0;
-    }
-
-    l->hook_tx_active = 1;
-    l->hook_tx_pc = pc;
-    l->hook_tx_goal = l->frames_tx + 1;
-    return 0;
-}
-
 static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
     gba_link_t *l = (gba_link_t *)user;
 
@@ -134,7 +98,7 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
         uint8_t n = splb20_read(c, LINK_RAM_TMPCOUNT);
         uint8_t edges = n ? (uint8_t)(n - 1) : 0;
 
-        if (!emu_link_wait_tx(l, pc, edges, 0))
+        if (!gba_link_send_count(l, edges))
             return SPLB20_HOOK_WAIT;
         ++emu_link_hook_send;
 
@@ -161,7 +125,7 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
         uint8_t edges = n ? (uint8_t)(n - 1) : 0;
         uint8_t flags_b8;
 
-        if (!emu_link_wait_tx(l, pc, edges, 0))
+        if (!gba_link_send_count(l, edges))
             return SPLB20_HOOK_WAIT;
         ++emu_link_hook_exchange;
 
@@ -217,7 +181,7 @@ static int emu_link_pc_hook(splb20_t *c, uint16_t pc, void *user) {
          * caller's wake path does not invoke link_recv for this pulse, so send
          * a wake-only transport event and then let the ROM continue. */
         if (splb20_read(c, LINK_RAM_STATE) == 4) {
-            if (!emu_link_wait_tx(l, pc, 0, 1))
+            if (!gba_link_send_wake(l))
                 return SPLB20_HOOK_WAIT;
             ++emu_link_hook_answer;
         }
